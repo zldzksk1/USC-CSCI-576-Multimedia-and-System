@@ -12,7 +12,8 @@ import sys
 
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
                             QMetaObject, QObject, QPoint, QRect,
-                            QSize, QTime, QUrl, Qt)
+                            QSize, QTime, QUrl, Qt,
+                            QStringListModel)
 from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
                            QFont, QFontDatabase, QGradient, QIcon,
                            QImage, QKeySequence, QLinearGradient, QPainter,
@@ -22,7 +23,8 @@ from PySide6.QtWidgets import (QApplication, QDialog, QGraphicsView, QListView,
 
 
 class Ui_Dialog(object):
-    def setupUi(self, Dialog):
+
+    def __init__(self):
         if not Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
         Dialog.resize(738, 447)
@@ -45,7 +47,29 @@ class Ui_Dialog(object):
         self.retranslateUi(Dialog)
 
         QMetaObject.connectSlotsByName(Dialog)
-    # setupUi
+
+        self.btnPlay.clicked.connect(self.play_video)
+        self.btnPause.clicked.connect(self.pause_video)
+        self.btnStop.clicked.connect(self.stop_video)
+
+        # Add some strings to the model
+        strings = ["Item 1", "Item 2", "Item 3"]
+        self.model = QStringListModel()
+        self.model.setStringList(strings)
+
+        # Set the model on the list view
+        self.listView.setModel(self.model)
+
+
+    def play_video(self):
+        print("play_video")
+
+
+    def pause_video(self):
+        print("pause_video")
+
+    def stop_video(self):
+        print("stop_video")
 
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
@@ -65,7 +89,10 @@ if __name__ == '__main__':
     # Create and show the form
     Dialog = QDialog()
     ui = Ui_Dialog()
-    ui.setupUi(Dialog)
+    #ui.setupUi(Dialog)
     Dialog.show()
-    # Run the main Qt loop
-    sys.exit(app.exec_())
+    # Start the event loop
+    app.exec()
+
+    # Exit the application
+    sys.exit()
