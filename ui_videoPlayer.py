@@ -124,12 +124,18 @@ class Ui_Dialog(object):
         self.btnPlay = QPushButton(Dialog)
         self.btnPlay.setObjectName(u"btnPlay")
         self.btnPlay.setGeometry(QRect(430, 380, 93, 28))
+        self.btnPlay.setStyleSheet("background-color: grey;")
+
         self.btnPause = QPushButton(Dialog)
         self.btnPause.setObjectName(u"btnPause")
         self.btnPause.setGeometry(QRect(530, 380, 93, 28))
+        self.btnPause.setStyleSheet("background-color: grey;")
+
         self.btnStop = QPushButton(Dialog)
         self.btnStop.setObjectName(u"btnStop")
         self.btnStop.setGeometry(QRect(630, 380, 93, 28))
+        self.btnStop.setStyleSheet("background-color: grey;")
+
         self.listView = QListView(Dialog)
         self.listView.setObjectName(u"listView")
         self.listView.setGeometry(QRect(30, 40, 256, 361))   
@@ -198,12 +204,16 @@ class Ui_Dialog(object):
             if self.paused:
                 self.video_thread.resum()
                 self.paused = False
+                self.btnPlay.setText(
+                QCoreApplication.translate("Dialog", u"Play", None))
 
     def pause_video(self):
         #set paused to True 
         self.video_thread.pause()
         if not self.paused:
             self.paused = True
+            self.btnPlay.setText(
+            QCoreApplication.translate("Dialog", u"Resum", None))
 
 
     def stop_video(self):
