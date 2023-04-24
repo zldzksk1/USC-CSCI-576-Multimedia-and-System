@@ -211,9 +211,9 @@ class Ui_Dialog(object):
         self.video_thread.stop()
 
         # reset the all related var
-        global paused
-        paused = False
         self.start = False
+        self.paused = False
+
 
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
