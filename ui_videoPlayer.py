@@ -46,12 +46,24 @@ class VideoThread(QThread):
         self.height = height
         self.num_frames = num_frames
         self.fps = fps
+        self.threadPaused = False
+        self.stop_flag = False
+        self.stop_event = False
 
     def run(self):
         # open the video file for reading
         with open(self.file_path, "rb") as file:
             # read each frame of the video and display it
             for i in range(self.num_frames):
+
+                while self.threadPaused:
+                    # print("timeSleep")
+                    time.sleep(0.1)
+
+                if self.stop_event:
+                    print("break")
+                    break
+
                 # read the raw pixel data for the current frame
                 raw_data = file.read(self.width * self.height * 3)
 
@@ -68,7 +80,18 @@ class VideoThread(QThread):
                 time.sleep(1 / self.fps)
 
     def stop(self):
-        self.terminate()
+        #set the signal to break for loop
+        self.stop_event = True
+
+        #kill the thread and emit the finish signal
+        self.quit()
+        self.finished.emit()
+    
+    def pause(self):
+        self.threadPaused = True
+
+    def resum(self):
+        self.threadPaused = False
 
 
 class VideoWidget(QWidget):
@@ -110,6 +133,10 @@ class Ui_Dialog(object):
         self.listView = QListView(Dialog)
         self.listView.setObjectName(u"listView")
         self.listView.setGeometry(QRect(30, 40, 256, 361))   
+        
+        #video player button attributes
+        self.start = False
+        self.paused = False
 
         # create a label widget to display the video frames
         self.label = QLabel(Dialog)
@@ -119,9 +146,8 @@ class Ui_Dialog(object):
         # create a layout for the widget and add the label to it
         layout = QVBoxLayout()
         layout.addWidget(self.label)
+
         #self.setLayout(layout)
-
-
         self.retranslateUi(Dialog)
 
         QMetaObject.connectSlotsByName(Dialog)
@@ -137,18 +163,6 @@ class Ui_Dialog(object):
 
         # Set the model on the list view
         self.listView.setModel(self.model)
-
-        # define the path to the RGB video file and the video parameters
-        file_path = Path("./InputVideo.rgb")
-        width, height = 480, 270
-        fps, num_frames = 30, 8682
-
-        # create a thread to read the video and emit signals with the frame data
-        video_thread = VideoThread(file_path, width, height, num_frames, fps)
-        video_thread.update_frame.connect(self.update_frame)
-
-        # start the thread to read the video
-        video_thread.start()
 
         # close the OpenCV window
         cv2.destroyAllWindows()
@@ -166,11 +180,40 @@ class Ui_Dialog(object):
     def play_video(self):
         print("play_video")
 
+        if not self.start:
+            # define the path to the RGB video file and the video parameters
+            file_path = Path("./InputVideo.rgb")
+            width, height = 480, 270
+            fps, num_frames = 30, 8682
+
+            # create a thread to read the video and emit signals with the frame data
+            self.video_thread = VideoThread(file_path, width, height, num_frames, fps)
+            self.video_thread.update_frame.connect(self.update_frame)
+
+            # start the thread to read the video
+            self.video_thread.start()
+            self.start = True
+
+        if self.start:
+            if self.paused:
+                self.video_thread.resum()
+                self.paused = False
+
     def pause_video(self):
-        print("pause_video")
+        #set paused to True 
+        self.video_thread.pause()
+        if not self.paused:
+            self.paused = True
+
 
     def stop_video(self):
-        print("stop_video")
+        # call stop function in the thread class
+        self.video_thread.stop()
+
+        # reset the all related var
+        global paused
+        paused = False
+        self.start = False
 
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
