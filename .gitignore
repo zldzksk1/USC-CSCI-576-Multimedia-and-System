@@ -1,0 +1,9 @@
+## Ignore filenames
+
+## Ignore file extensions
+*.wav
+*.rgb
+*.mp4
+
+## Ignore directories
+backup/
