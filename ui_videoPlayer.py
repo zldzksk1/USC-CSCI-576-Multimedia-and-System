@@ -133,7 +133,9 @@ class AudioThread(QThread):
         self.fps = 30
 
     def run(self):
-        wf = wave.open("./InputAudio.wav", 'rb')
+        # Change later
+        print(self.file_path)
+        wf = wave.open(str(self.file_path), 'rb')
         p = pyaudio.PyAudio()
 
         print(f'self.start_frame_idx: {self.start_frame_idx}')
@@ -205,17 +207,18 @@ class VideoWidget(QWidget):
 
 
 class Ui_Dialog(object):
-
-    def __init__(self, args):
-
+    
+    def __init__(self, Dialog, args):
         print("Parameters: ", args)
 
         # define the path to the RGB video file and the video parameters
-        self.file_path = Path(args[1])
+        self.video_file_path = Path(args[1])
+        self.audio_file_path = Path(args[2]) 
         self.width, self.height = 480, 270
         self.fps, self.num_frames = 30, 8682
 
         self.shot_threshold = 20
+        self.same_shot_windows = 3
         self.shot_strings = []
         self.shot_frames = []
 
@@ -274,7 +277,7 @@ class Ui_Dialog(object):
         ###################
         shot_number = 0
         # open the video file for reading
-        with open(self.file_path, "rb") as file:
+        with open(self.video_file_path, "rb") as file:
             # read each frame of the video and display it
             for i in range(self.num_frames):
 
@@ -295,12 +298,27 @@ class Ui_Dialog(object):
                     mad = meanAbsDiff(bgr_image, prev_bgr_image)
 
                     if mad > self.shot_threshold:
-                        shot_number = shot_number + 1
-                        self.shot_strings.append("Shot" + str(shot_number))
-                        self.shot_frames.append(i)
                         # Print MAD value
-                        print("Mean Absolute Difference: ",
-                              mad, ", #ofFrames: ", i)
+                        print("shot_number : ", shot_number+1,
+                               ",MAD: ", mad,
+                               ", Frame Index: ", i)
+                        if shot_number > 1:   
+                            #print("i: ", i, ",shot_number: ", shot_number,",past_frame : ",self.shot_frames[shot_number-1])
+                            #print(i-self.shot_frames[shot_number-1])
+                            if (i-self.shot_frames[shot_number-1] <= self.same_shot_windows):
+                                print("Skip")
+                            else :
+                               # Add it to the array.
+                                shot_number = shot_number + 1
+                                self.shot_strings.append("Shot" + str(shot_number))
+                                self.shot_frames.append(i) 
+                                
+                        else :
+                            # Add it to the array.
+                            shot_number = shot_number + 1
+                            self.shot_strings.append("Shot" + str(shot_number))
+                            self.shot_frames.append(i)
+
                 else:
                     # For the first frame we do not calculate the pixel difference and just add it to the array.
                     shot_number = shot_number + 1
@@ -309,6 +327,8 @@ class Ui_Dialog(object):
 
                 # store the current frame as the previous frame for the next iteration
                 prev_bgr_image = bgr_image.copy()
+
+                
 
         # Add strings to the model
         self.model = QStringListModel()
@@ -337,7 +357,7 @@ class Ui_Dialog(object):
 
             # create a thread to read the video and emit signals with the frame data
             self.video_thread = VideoThread(
-                self.file_path, self.width, self.height, self.num_frames, self.fps, self.start_frame_idx)
+                self.video_file_path, self.width, self.height, self.num_frames, self.fps, self.start_frame_idx)
             self.video_thread.update_frame.connect(self.update_frame)
 
             # start the thread to read the video
@@ -345,7 +365,7 @@ class Ui_Dialog(object):
             self.start = True
 
             # audio, get parameter later
-            audioFile_path = Path("./InputAudio.wav")
+            audioFile_path = self.audio_file_path
 
             # create an audio thread
             self.audio_thread = AudioThread(
@@ -434,20 +454,46 @@ class Ui_Dialog(object):
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
         self.play_video()
+    
+    def close(self):
+
+        # wait for the both two threads to finish or be killed
+        while self.video_thread.isRunning() or self.audio_thread.isRunning():
+            self.video_thread.stop()
+            self.audio_thread.stop()
+
+        # check if the tvideo and audio hreads were killed or has finished
+        # Caution: make sure threads are killed before re-startint the thread.
+        if self.video_thread.isFinished() and self.audio_thread.isFinished():
+            print("Threads ended properly")
+        else:
+            print("Threads are still running")
+
+
+class MainQDialog(QDialog):
+    def __init__(self, args):
+        super().__init__()
+
+        # Set up the UI
+        self.ui = Ui_Dialog(self, args)
+        #self.ui.setupUi(self)
+
+    def closeEvent(self, event):
+        # Custom behavior when the "X" button is pressed
+        print("X button pressed. Closing the QDialog.")
+        self.ui.close()
+
+        event.accept()  # Accept the event to close the QDialog
 
 
 if __name__ == '__main__':
 
-    # Create the Qt Application
+    # QtApp
     app = QApplication(sys.argv)
 
-    # Create and show the form
-    Dialog = QDialog()
-    ui = Ui_Dialog(sys.argv)
-    Dialog.show()
+    # Create and show the MainQDialog
+    dialog = MainQDialog(sys.argv)
+    dialog.show()
 
-    # Start the event loop
+    # Start
     app.exec()
-
-    # Exit the application
-    sys.exit()
