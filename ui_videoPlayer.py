@@ -380,6 +380,7 @@ class Ui_Dialog(object):
         # reset the all related var
         self.start = False
         self.paused = False
+        self.start_frame_idx = 0
 
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
@@ -419,16 +420,16 @@ class Ui_Dialog(object):
         if(self.start):
             self.stop_video()
 
-        # wait for the both two threads to finish or be killed
-        while self.video_thread.isRunning() or self.audio_thread.isRunning():
-            pass
+            # wait for the both two threads to finish or be killed
+            while self.video_thread.isRunning() or self.audio_thread.isRunning():
+                pass
 
-        # check if the tvideo and audio hreads were killed or has finished
-        # Caution: make sure threads are killed before re-startint the thread.
-        if self.video_thread.isFinished() and self.audio_thread.isFinished():
-            print("Thread ended properly")
-        else:
-            print("Thread was safely terminated")
+            # check if the tvideo and audio hreads were killed or has finished
+            # Caution: make sure threads are killed before re-startint the thread.
+            if self.video_thread.isFinished() and self.audio_thread.isFinished():
+                print("Thread ended properly")
+            else:
+                print("Thread was safely terminated")
 
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
