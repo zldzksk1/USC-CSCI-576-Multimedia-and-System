@@ -324,6 +324,24 @@ class Ui_Dialog(object):
         ###################
         # Search shots
         ###################
+        self.searchShots()
+
+        ##########################
+        # Extract Scene grouping shots
+        ##########################
+        self.extractScenes()
+
+        # Add strings to the model
+        self.model = QStringListModel()
+        self.model.setStringList(self.index_labels)
+
+        # Set the model on the list view
+        self.listView.setModel(self.model)
+
+        # close the OpenCV window
+        cv2.destroyAllWindows()
+
+    def searchShots(self):
         shot_number = 0
         # open the video file for reading
         with open(self.video_file_path, "rb") as file:
@@ -353,9 +371,9 @@ class Ui_Dialog(object):
                                ", Frame Index: ", i)
                         if shot_number > 1:   
                             if (i-self.shot_frame_idx[shot_number-1] <= self.same_shot_windows):
-                                #print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
-                                #self.shot_frame_idx[shot_number-1] = i
-                                print("We have the same shots between same_shot_windows. Skip it!!")
+                                print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                                self.shot_frame_idx[shot_number-1] = i
+                                #print("We have the same shots between same_shot_windows. Skip it!!")
                             else :
                                # Add it to the array.
                                 shot_number = shot_number + 1
@@ -380,9 +398,7 @@ class Ui_Dialog(object):
                 # store the current frame as the previous frame for the next iteration
                 prev_bgr_image = bgr_image.copy()
 
-        ##########################
-        # Extract Scene grouping shots
-        ##########################
+    def extractScenes(self):
         # Extract features from frames
         #frame_features = np.vstack([extract_features(frame) for frame in self.shot_frames])
         frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames])
@@ -436,15 +452,12 @@ class Ui_Dialog(object):
         # Add the last scene
         #scenes.append(current_scene)
 
-        # Add strings to the model
-        self.model = QStringListModel()
-        self.model.setStringList(self.index_labels)
-
-        # Set the model on the list view
-        self.listView.setModel(self.model)
-
-        # close the OpenCV window
-        cv2.destroyAllWindows()
+        #For Debug
+        i=0
+        for label in self.index_labels:
+            print(f"label: {label} ", "index_frames: ", self.index_frames[i])
+            i = i +1
+        
 
     @Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
@@ -528,7 +541,8 @@ class Ui_Dialog(object):
     def on_item_clicked(self, index):
 
         idx = self.listView.currentIndex().row()
-        frame_idx = self.index_frames[idx-1]
+        frame_idx = self.index_frames[idx]
+        print("idx: ",idx)
 
         # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
