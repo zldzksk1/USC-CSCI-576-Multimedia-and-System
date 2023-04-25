@@ -39,14 +39,17 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 
 from PySide6.QtMultimedia import (QMediaPlayer)
 
-from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
-from tensorflow.keras.preprocessing import image
+#from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+#from tensorflow.keras.preprocessing import image
+
+from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Load pre-trained VGG-16 model
-model = VGG16(weights='imagenet', include_top=False, pooling='avg')
+#model = VGG16(weights='imagenet', include_top=False, pooling='avg')
 
 # Extract features from an image
+'''
 def extract_features(img):
     img = cv2.resize(img, (224, 224))
     if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
@@ -56,6 +59,31 @@ def extract_features(img):
     x = preprocess_input(x)
     features = model.predict(x)
     return features
+
+# Function to extract color histogram features from an image
+def extract_features(img, bins=8):
+    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
+    hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    cv2.normalize(hist, hist)
+    return hist.flatten()
+'''
+
+# Function to extract color histogram features from an image
+def extract_color_histogram_features(img, bins=8):
+    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
+    hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    cv2.normalize(hist, hist)
+    return hist.flatten()
+
+# Function to extract HOG features from an image
+def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
+    #gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_img=img
+    hog_features = hog(gray_img, orientations=9, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
+    return hog_features
+
 
 # Calculate Absolute Difference
 def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
@@ -356,13 +384,15 @@ class Ui_Dialog(object):
         # Extract Scene grouping shots
         ##########################
         # Extract features from frames
-        frame_features = np.vstack([extract_features(frame) for frame in self.shot_frames])
+        #frame_features = np.vstack([extract_features(frame) for frame in self.shot_frames])
+        frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames])
+
 
         # Calculate similarity matrix
         similarity_matrix = cosine_similarity(frame_features)
 
         # Group shots into scenes using a threshold
-        threshold = 0.6  # Adjust this value based on your requirements        
+        sceneThreshold = 0.7  # Adjust this value based on your requirements        
         #scenes = []
         shotNum = 1
         sceneNum = 1
@@ -373,17 +403,18 @@ class Ui_Dialog(object):
         self.index_labels.append("Scene 1")
         self.index_frames.append(self.shot_frame_idx[frame_idx])
 
-        self.index_labels.append("       Shot "+str(shotNum))
+        self.index_labels.append("          Shot "+str(shotNum))
         self.index_frames.append(self.shot_frame_idx[frame_idx])
         frame_idx = frame_idx + 1
 
         for i in range(1, len(self.shot_frames)):
-            if similarity_matrix[i - 1, i] > threshold:
+            print(similarity_matrix[i - 1, i])
+            if similarity_matrix[i - 1, i] > sceneThreshold:
                 current_scene.append(self.shot_frames[i])
                 shotNum = shotNum + 1
                 
                 #Save Index labels and related frame_idx
-                self.index_labels.append("       Shot "+str(shotNum))
+                self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
                 frame_idx = frame_idx + 1
                 print(f"frame_idx {frame_idx}")
@@ -398,7 +429,7 @@ class Ui_Dialog(object):
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
 
-                self.index_labels.append("       Shot "+str(shotNum))
+                self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
                 frame_idx = frame_idx + 1
 
