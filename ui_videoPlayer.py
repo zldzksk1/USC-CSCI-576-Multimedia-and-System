@@ -21,7 +21,6 @@ import cv2
 
 import re
 
-
 import sys
 
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
@@ -40,7 +39,25 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 
 from PySide6.QtMultimedia import (QMediaPlayer)
 
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.preprocessing import image
+from sklearn.metrics.pairwise import cosine_similarity
 
+# Load pre-trained VGG-16 model
+model = VGG16(weights='imagenet', include_top=False, pooling='avg')
+
+# Extract features from an image
+def extract_features(img):
+    img = cv2.resize(img, (224, 224))
+    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
+    features = model.predict(x)
+    return features
+
+# Calculate Absolute Difference
 def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
     # Calculate absolute difference betweeb two continuous frames
     abs_diff = cv2.absdiff(img1, img2)
@@ -220,7 +237,11 @@ class Ui_Dialog(object):
         self.shot_threshold = 20
         self.same_shot_windows = 3
         self.shot_strings = []
+        self.shot_frame_idx = []
         self.shot_frames = []
+
+        self.index_labels = []
+        self.index_frames = []
 
         if not Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
@@ -300,39 +321,93 @@ class Ui_Dialog(object):
                     if mad > self.shot_threshold:
                         # Print MAD value
                         print("shot_number : ", shot_number+1,
-                               ",MAD: ", mad,
+                               ", MAD: ", mad,
                                ", Frame Index: ", i)
                         if shot_number > 1:   
-                            #print("i: ", i, ",shot_number: ", shot_number,",past_frame : ",self.shot_frames[shot_number-1])
-                            #print(i-self.shot_frames[shot_number-1])
-                            if (i-self.shot_frames[shot_number-1] <= self.same_shot_windows):
-                                print("Skip")
+                            if (i-self.shot_frame_idx[shot_number-1] <= self.same_shot_windows):
+                                #print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                                #self.shot_frame_idx[shot_number-1] = i
+                                print("We have the same shots between same_shot_windows. Skip it!!")
                             else :
                                # Add it to the array.
                                 shot_number = shot_number + 1
                                 self.shot_strings.append("Shot" + str(shot_number))
-                                self.shot_frames.append(i) 
+                                self.shot_frame_idx.append(i) 
+                                self.shot_frames.append(bgr_image)
                                 
                         else :
                             # Add it to the array.
                             shot_number = shot_number + 1
                             self.shot_strings.append("Shot" + str(shot_number))
-                            self.shot_frames.append(i)
+                            self.shot_frame_idx.append(i)
+                            self.shot_frames.append(bgr_image)
 
                 else:
                     # For the first frame we do not calculate the pixel difference and just add it to the array.
                     shot_number = shot_number + 1
                     self.shot_strings.append("Shot" + str(shot_number))
-                    self.shot_frames.append(i)
+                    self.shot_frame_idx.append(i)
+                    self.shot_frames.append(bgr_image)
 
                 # store the current frame as the previous frame for the next iteration
                 prev_bgr_image = bgr_image.copy()
 
+        ##########################
+        # Extract Scene grouping shots
+        ##########################
+        # Extract features from frames
+        frame_features = np.vstack([extract_features(frame) for frame in self.shot_frames])
+
+        # Calculate similarity matrix
+        similarity_matrix = cosine_similarity(frame_features)
+
+        # Group shots into scenes using a threshold
+        threshold = 0.6  # Adjust this value based on your requirements        
+        #scenes = []
+        shotNum = 1
+        sceneNum = 1
+        frame_idx = 0
+        current_scene = [self.shot_frames[0]]
+
+        #Save Index labels and related frame_idx
+        self.index_labels.append("Scene 1")
+        self.index_frames.append(self.shot_frame_idx[frame_idx])
+
+        self.index_labels.append("       Shot "+str(shotNum))
+        self.index_frames.append(self.shot_frame_idx[frame_idx])
+        frame_idx = frame_idx + 1
+
+        for i in range(1, len(self.shot_frames)):
+            if similarity_matrix[i - 1, i] > threshold:
+                current_scene.append(self.shot_frames[i])
+                shotNum = shotNum + 1
                 
+                #Save Index labels and related frame_idx
+                self.index_labels.append("       Shot "+str(shotNum))
+                self.index_frames.append(self.shot_frame_idx[frame_idx])
+                frame_idx = frame_idx + 1
+                print(f"frame_idx {frame_idx}")
+            else:
+                #scenes.append(current_scene)
+                current_scene = [self.shot_frames[i]]
+                sceneNum = sceneNum + 1
+                shotNum = 1
+
+                print(f"frame_idx {frame_idx}")
+                #Save Index labels and related frame_idx
+                self.index_labels.append("Scene "+str(sceneNum))
+                self.index_frames.append(self.shot_frame_idx[frame_idx])
+
+                self.index_labels.append("       Shot "+str(shotNum))
+                self.index_frames.append(self.shot_frame_idx[frame_idx])
+                frame_idx = frame_idx + 1
+
+        # Add the last scene
+        #scenes.append(current_scene)
 
         # Add strings to the model
         self.model = QStringListModel()
-        self.model.setStringList(self.shot_strings)
+        self.model.setStringList(self.index_labels)
 
         # Set the model on the list view
         self.listView.setModel(self.model)
@@ -402,6 +477,10 @@ class Ui_Dialog(object):
         self.paused = False
         self.start_frame_idx = 0
 
+        # select the first item in the list
+        index = self.model.index(0)
+        self.listView.setCurrentIndex(index)
+
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
             QCoreApplication.translate("Dialog", u"Dialog", None))
@@ -416,16 +495,9 @@ class Ui_Dialog(object):
     # Define a custom slot to handle the click event
     @Slot('QModelIndex')
     def on_item_clicked(self, index):
-        item = index.data(Qt.DisplayRole)  # e.g. 'shot14'
 
-        match = re.search(r'\d+$', item)
-
-        if match:
-            # regex takes a time, so if this causes issues, use anothery way.
-            shot_idx = int(match.group())
-
-        # Move both the video and audio frame into the selected one by the user.
-        frame_idx = self.shot_frames[shot_idx-1]
+        idx = self.listView.currentIndex().row()
+        frame_idx = self.index_frames[idx-1]
 
         # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
@@ -438,7 +510,16 @@ class Ui_Dialog(object):
 
         # if video started, stop and kill all threads
         if(self.start):
-            self.stop_video()
+            #self.stop_video()
+            print("if runing, make it stop video!")
+            # call stop function in the thread class
+            self.video_thread.stop()
+            self.audio_thread.stop()
+
+            # reset the all related var
+            self.start = False
+            self.paused = False
+            self.start_frame_idx = 0
 
             # wait for the both two threads to finish or be killed
             while self.video_thread.isRunning() or self.audio_thread.isRunning():
