@@ -42,7 +42,7 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 
 
 def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
-    # Calculate absolute difference
+    # Calculate absolute difference betweeb two continuous frames
     abs_diff = cv2.absdiff(img1, img2)
 
     # Calculate mean of absolute difference
@@ -70,6 +70,7 @@ class VideoThread(QThread):
         # open the video file for reading
         with open(self.file_path, "rb") as file:
 
+            #Set the start frame
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             # read each frame of the video and display it
@@ -120,6 +121,7 @@ class VideoThread(QThread):
 
 
 class AudioThread(QThread):
+
     def __init__(self, file_path, startIdx: int, chunk_size=1024):
         super().__init__()
 
@@ -135,6 +137,7 @@ class AudioThread(QThread):
         p = pyaudio.PyAudio()
 
         print(f'self.start_frame_idx: {self.start_frame_idx}')
+
         # set the start position of audio
         starting_time_offset = self.start_frame_idx / self.fps
         starting_frame_offset = int(starting_time_offset * wf.getframerate())
@@ -149,6 +152,8 @@ class AudioThread(QThread):
         audio_array = np.frombuffer(data, dtype=np.int16)
 
         while data != b'' and not self.stop_event:
+            
+            # when video is paused
             while self.thread_paused:
                 time.sleep(0.1)
 
@@ -157,7 +162,6 @@ class AudioThread(QThread):
 
             stream.write(data)
             data = wf.readframes(self.chunk_size)
-            # time.sleep(0.05)
 
         stream.stop_stream()
         stream.close()
@@ -176,8 +180,8 @@ class AudioThread(QThread):
         self.quit()
         self.finished.emit()
 
-
 class VideoWidget(QWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -340,7 +344,7 @@ class Ui_Dialog(object):
             self.video_thread.start()
             self.start = True
 
-            # audio
+            # audio, get parameter later
             audioFile_path = Path("./InputAudio.wav")
 
             # create an audio thread
@@ -402,7 +406,7 @@ class Ui_Dialog(object):
         # Move both the video and audio frame into the selected one by the user.
         frame_idx = self.shot_frames[shot_idx-1]
 
-        # kill both video and audio threads, and start from the given frame index.
+        # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
 
         # Below is just for debugging.
@@ -411,21 +415,20 @@ class Ui_Dialog(object):
 
     def move_to_frame(self, frame_idx: int):
 
-        # stop and kill all threads
+        # if video started, stop and kill all threads
         if(self.start):
             self.stop_video()
 
-        # wait for the thread to finish or be killed
+        # wait for the both two threads to finish or be killed
         while self.video_thread.isRunning() or self.audio_thread.isRunning():
-            # do something else while waiting
             pass
 
-        # check if the thread was killed or has finished
-        # Caution: make sure threads are killed before re-start the thread.
+        # check if the tvideo and audio hreads were killed or has finished
+        # Caution: make sure threads are killed before re-startint the thread.
         if self.video_thread.isFinished() and self.audio_thread.isFinished():
-            print("Thread ended normally")
+            print("Thread ended properly")
         else:
-            print("Thread was killed")
+            print("Thread was safely terminated")
 
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
