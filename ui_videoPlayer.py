@@ -371,8 +371,7 @@ class Ui_Dialog(object):
         # call stop function in the thread class
         self.video_thread.stop()
         self.audio_thread.stop()
-        del self.video_thread
-        del self.audio_thread
+
         # reset the all related var
         self.start = False
         self.paused = False
@@ -417,9 +416,7 @@ class Ui_Dialog(object):
 
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
-        print(f'frame_idx1: {frame_idx}')
         self.play_video()
-        print(f'frame_idx2: {frame_idx}')
 
 
 if __name__ == '__main__':
