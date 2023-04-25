@@ -368,6 +368,7 @@ class Ui_Dialog(object):
                 QCoreApplication.translate("Dialog", u"Resume", None))
 
     def stop_video(self):
+        print("stop video!")
         # call stop function in the thread class
         self.video_thread.stop()
         self.audio_thread.stop()
@@ -413,6 +414,18 @@ class Ui_Dialog(object):
         # stop and kill all threads
         if(self.start):
             self.stop_video()
+
+        # wait for the thread to finish or be killed
+        while self.video_thread.isRunning() or self.audio_thread.isRunning():
+            # do something else while waiting
+            pass
+
+        # check if the thread was killed or has finished
+        # Caution: make sure threads are killed before re-start the thread.
+        if self.video_thread.isFinished() and self.audio_thread.isFinished():
+            print("Thread ended normally")
+        else:
+            print("Thread was killed")
 
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
