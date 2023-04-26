@@ -45,30 +45,6 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Load pre-trained VGG-16 model
-#model = VGG16(weights='imagenet', include_top=False, pooling='avg')
-
-# Extract features from an image
-'''
-def extract_features(img):
-    img = cv2.resize(img, (224, 224))
-    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
-    x = image.img_to_array(img)
-    x = np.expand_dims(x, axis=0)
-    x = preprocess_input(x)
-    features = model.predict(x)
-    return features
-
-# Function to extract color histogram features from an image
-def extract_features(img, bins=8):
-    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
-    hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
-    cv2.normalize(hist, hist)
-    return hist.flatten()
-'''
-
 # Function to extract color histogram features from an image
 def extract_color_histogram_features(img, bins=8):
     if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
@@ -79,7 +55,6 @@ def extract_color_histogram_features(img, bins=8):
 
 # Function to extract HOG features from an image
 def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
-    #gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray_img=img
     hog_features = hog(gray_img, orientations=9, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
     return hog_features
@@ -335,8 +310,9 @@ class Ui_Dialog(object):
         self.model = QStringListModel()
         self.model.setStringList(self.index_labels)
 
-        # Set the model on the list view
+        # Set the model on the list view, Prevent users from changing shot name
         self.listView.setModel(self.model)
+        self.listView.setEditTriggers(QListView.NoEditTriggers)
 
         # close the OpenCV window
         cv2.destroyAllWindows()
@@ -400,7 +376,6 @@ class Ui_Dialog(object):
 
     def extractScenes(self):
         # Extract features from frames
-        #frame_features = np.vstack([extract_features(frame) for frame in self.shot_frames])
         frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames])
 
 
@@ -409,7 +384,6 @@ class Ui_Dialog(object):
 
         # Group shots into scenes using a threshold
         sceneThreshold = 0.7  # Adjust this value based on your requirements        
-        #scenes = []
         shotNum = 1
         sceneNum = 1
         frame_idx = 0
@@ -447,17 +421,7 @@ class Ui_Dialog(object):
 
                 self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
-                frame_idx = frame_idx + 1
-
-        # Add the last scene
-        #scenes.append(current_scene)
-
-        #For Debug
-        i=0
-        for label in self.index_labels:
-            print(f"label: {label} ", "index_frames: ", self.index_frames[i])
-            i = i +1
-        
+                frame_idx = frame_idx + 1        
 
     @Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
@@ -470,7 +434,6 @@ class Ui_Dialog(object):
         self.label.setPixmap(pixmap)
 
     def play_video(self):
-        print("play_video")
 
         if not self.start:
 
@@ -511,7 +474,6 @@ class Ui_Dialog(object):
                 QCoreApplication.translate("Dialog", u"Resume", None))
 
     def stop_video(self):
-        print("stop video!")
         # call stop function in the thread class
         self.video_thread.stop()
         self.audio_thread.stop()
@@ -538,7 +500,6 @@ class Ui_Dialog(object):
             QCoreApplication.translate("Dialog", u"Pause", None))
         self.btnStop.setText(
             QCoreApplication.translate("Dialog", u"Stop", None))
-    # retranslateUi
 
     # Define a custom slot to handle the click event
     @Slot('QModelIndex')
@@ -551,16 +512,10 @@ class Ui_Dialog(object):
         # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
 
-        # Below is just for debugging.
-        # QMessageBox.information(
-        #     self.listView, 'Item Clicked', f'You clicked on {item}')
-
     def move_to_frame(self, frame_idx: int):
 
         # if video started, stop and kill all threads
         if(self.start):
-            #self.stop_video()
-            print("if runing, make it stop video!")
             # call stop function in the thread class
             self.video_thread.stop()
             self.audio_thread.stop()
@@ -606,7 +561,6 @@ class MainQDialog(QDialog):
 
         # Set up the UI
         self.ui = Ui_Dialog(self, args)
-        #self.ui.setupUi(self)
 
     def closeEvent(self, event):
         # Custom behavior when the "X" button is pressed
