@@ -525,6 +525,10 @@ class Ui_Dialog(object):
         index = self.model.index(0)
         self.listView.setCurrentIndex(index)
 
+        # When stop click, make play button's label 'Play'
+        self.btnPlay.setText(
+            QCoreApplication.translate("Dialog", u"Play", None))
+
     def retranslateUi(self, Dialog):
         Dialog.setWindowTitle(
             QCoreApplication.translate("Dialog", u"Dialog", None))
