@@ -46,17 +46,23 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
+
+SHOT_THRESHOLD = 20
+SAME_SHOT_WINDOWS = 10
+SCENE_THRESHOLD = 0.65
+
 # Function to extract color histogram features from an image
 def extract_color_histogram_features(img, bins=8):
-    if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
+    #if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+    #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
     hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
 
 # Function to extract HOG features from an image
 def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
-    gray_img=img
+    #gray_img=img
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     hog_features = hog(gray_img, orientations=9, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
     return hog_features
 
@@ -245,11 +251,10 @@ class Ui_Dialog(object):
         self.width, self.height = 480, 270
         self.fps = 30
         self.num_frames = (int)(self.calNumOfFrame())
-
-        self.shot_threshold = 20
-        self.same_shot_windows = 3
+        
         self.shot_frame_idx = []
-        self.shot_frames = []
+        self.shot_frames_gray = []
+        self.shot_frames_bgr = []
 
         self.index_labels = []
         self.index_frames = []
@@ -351,21 +356,22 @@ class Ui_Dialog(object):
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
                     (self.height, self.width, 3))
 
-                # convert the RGB scale to Grey scale
-                bgr_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
+                # convert the RGB scale to Grey scale                
+                bgr_image = pixels
+                gray_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
 
                 # calculate the pixel difference between two frames
                 if i > 0:
 
                     # Calculate mean of absolute difference
-                    mad = meanAbsDiff(bgr_image, prev_bgr_image)
+                    mad = meanAbsDiff(gray_image, prev_gray_image)
 
-                    if mad > self.shot_threshold:
+                    if mad > SHOT_THRESHOLD:
                         # Print MAD value
                         print("shot_number : ", shot_number+1,
                                ", MAD: ", mad,
                                ", Frame Index: ", i)
-                        if (i - self.shot_frame_idx[shot_number-1] <= self.same_shot_windows):
+                        if (i - self.shot_frame_idx[shot_number-1] <= SAME_SHOT_WINDOWS):
                             print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
                             self.shot_frame_idx[shot_number-1] = i
                             #print("We have the same shots between same_shot_windows. Skip it!!")
@@ -373,31 +379,32 @@ class Ui_Dialog(object):
                             # Add it to the array.
                             shot_number = shot_number + 1
                             self.shot_frame_idx.append(i) 
-                            self.shot_frames.append(bgr_image)
+                            self.shot_frames_gray.append(gray_image)
+                            self.shot_frames_bgr.append(bgr_image)
 
                 else:
                     # For the first frame we do not calculate the pixel difference and just add it to the array.
                     shot_number = shot_number + 1
                     self.shot_frame_idx.append(i)
-                    self.shot_frames.append(bgr_image)
+                    self.shot_frames_gray.append(gray_image)
+                    self.shot_frames_bgr.append(bgr_image)
 
                 # store the current frame as the previous frame for the next iteration
-                prev_bgr_image = bgr_image.copy()
+                prev_gray_image = gray_image.copy()
 
     def extractScenes(self):
         # Extract features from frames
-        frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames])
+        frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames_bgr])
 
 
         # Calculate similarity matrix
         similarity_matrix = cosine_similarity(frame_features)
 
-        # Group shots into scenes using a threshold
-        sceneThreshold = 0.7  # Adjust this value based on your requirements        
+        # Group shots into scenes using a threshold    
         shotNum = 1
         sceneNum = 1
         frame_idx = 0
-        current_scene = [self.shot_frames[0]]
+        current_scene = [self.shot_frames_bgr[0]]
 
         #Save Index labels and related frame_idx
         self.index_labels.append("Scene 1")
@@ -407,10 +414,10 @@ class Ui_Dialog(object):
         self.index_frames.append(self.shot_frame_idx[frame_idx])
         frame_idx = frame_idx + 1
 
-        for i in range(1, len(self.shot_frames)):
+        for i in range(1, len(self.shot_frames_bgr)):
             print(similarity_matrix[i - 1, i])
-            if similarity_matrix[i - 1, i] > sceneThreshold:
-                current_scene.append(self.shot_frames[i])
+            if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
+                current_scene.append(self.shot_frames_bgr[i])
                 shotNum = shotNum + 1
                 
                 #Save Index labels and related frame_idx
@@ -420,7 +427,7 @@ class Ui_Dialog(object):
                 print(f"frame_idx {frame_idx}")
             else:
                 #scenes.append(current_scene)
-                current_scene = [self.shot_frames[i]]
+                current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
                 shotNum = 1
 
