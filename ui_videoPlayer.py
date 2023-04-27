@@ -18,6 +18,7 @@ import wave
 
 import numpy as np
 import cv2
+import time
 
 import re
 
@@ -93,6 +94,8 @@ class VideoThread(QThread):
             #Set the start frame
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
+            next_frame_time = time.monotonic()
+
             # read each frame of the video and display it
             for i in range(self.start_frame_idx, self.num_frames):
 
@@ -117,7 +120,11 @@ class VideoThread(QThread):
                 self.update_frame.emit(bgr_image)
 
                 # wait for the specified number of milliseconds before showing the next frame
-                time.sleep(1 / self.fps)
+
+                # wait until it is time to display the next frame
+                next_frame_time += 1 / self.fps
+                sleep_time = max(next_frame_time - time.monotonic(), 0)
+                time.sleep(sleep_time)
 
     def stop(self):
         # set the signal to break for loop
@@ -235,11 +242,11 @@ class Ui_Dialog(object):
         self.video_file_path = Path(args[1])
         self.audio_file_path = Path(args[2]) 
         self.width, self.height = 480, 270
-        self.fps, self.num_frames = 30, 8682
+        self.fps = 30
+        self.num_frames = (int)(self.calNumOfFrame())
 
         self.shot_threshold = 20
         self.same_shot_windows = 3
-        self.shot_strings = []
         self.shot_frame_idx = []
         self.shot_frames = []
 
@@ -317,6 +324,18 @@ class Ui_Dialog(object):
         # close the OpenCV window
         cv2.destroyAllWindows()
 
+    def calNumOfFrame(self):
+        width, height =  self.width, self.height
+        num_channels = 3
+        bits_per_channel = 8
+
+        frame_size = width * height * num_channels * (bits_per_channel / 8)
+        file_size = os.path.getsize(self.video_file_path)
+
+        num_frames = file_size // frame_size
+
+        return num_frames
+
     def searchShots(self):
         shot_number = 0
         # open the video file for reading
@@ -331,7 +350,7 @@ class Ui_Dialog(object):
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
                     (self.height, self.width, 3))
 
-                # convert the RGB pixels to BGR format for displaying in OpenCV
+                # convert the RGB scale to Grey scale
                 bgr_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
 
                 # calculate the pixel difference between two frames
@@ -345,29 +364,19 @@ class Ui_Dialog(object):
                         print("shot_number : ", shot_number+1,
                                ", MAD: ", mad,
                                ", Frame Index: ", i)
-                        if shot_number > 1:   
-                            if (i-self.shot_frame_idx[shot_number-1] <= self.same_shot_windows):
-                                print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
-                                self.shot_frame_idx[shot_number-1] = i
-                                #print("We have the same shots between same_shot_windows. Skip it!!")
-                            else :
-                               # Add it to the array.
-                                shot_number = shot_number + 1
-                                self.shot_strings.append("Shot" + str(shot_number))
-                                self.shot_frame_idx.append(i) 
-                                self.shot_frames.append(bgr_image)
-                                
+                        if (i - self.shot_frame_idx[shot_number-1] <= self.same_shot_windows):
+                            print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                            self.shot_frame_idx[shot_number-1] = i
+                            #print("We have the same shots between same_shot_windows. Skip it!!")
                         else :
                             # Add it to the array.
                             shot_number = shot_number + 1
-                            self.shot_strings.append("Shot" + str(shot_number))
-                            self.shot_frame_idx.append(i)
+                            self.shot_frame_idx.append(i) 
                             self.shot_frames.append(bgr_image)
 
                 else:
                     # For the first frame we do not calculate the pixel difference and just add it to the array.
                     shot_number = shot_number + 1
-                    self.shot_strings.append("Shot" + str(shot_number))
                     self.shot_frame_idx.append(i)
                     self.shot_frames.append(bgr_image)
 
