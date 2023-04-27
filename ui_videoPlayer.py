@@ -86,6 +86,7 @@ class VideoThread(QThread):
         self.stop_flag = False
         self.stop_event = False
         self.start_frame_idx = startIdx
+        self.pause_time = 0
 
     def run(self):
         # open the video file for reading
@@ -95,7 +96,7 @@ class VideoThread(QThread):
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             next_frame_time = time.monotonic()
-            
+
             # read each frame of the video and display it
             for i in range(self.start_frame_idx, self.num_frames):
 
@@ -117,6 +118,12 @@ class VideoThread(QThread):
 
                 # wait until it is time to display the next frame
                 next_frame_time += 1 / self.fps
+                
+                time_diff = time.monotonic() - next_frame_time
+                if time_diff > 0:
+                    next_frame_time += time_diff
+
+                # wait until it is time to display the next frame
                 sleep_time = max(next_frame_time - time.monotonic(), 0)
                 time.sleep(sleep_time)
 
