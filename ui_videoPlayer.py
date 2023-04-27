@@ -95,12 +95,11 @@ class VideoThread(QThread):
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             next_frame_time = time.monotonic()
-
+            
             # read each frame of the video and display it
             for i in range(self.start_frame_idx, self.num_frames):
 
                 while self.threadPaused:
-                    # print("timeSleep")
                     time.sleep(0.1)
 
                 if self.stop_event:
@@ -113,13 +112,8 @@ class VideoThread(QThread):
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
                     (self.height, self.width, 3))
 
-                # convert the RGB pixels to BGR format for displaying in OpenCV
-                bgr_image = cv2.cvtColor(pixels, cv2.COLOR_RGB2BGR)
-
                 # emit a signal with the current frame data
-                self.update_frame.emit(bgr_image)
-
-                # wait for the specified number of milliseconds before showing the next frame
+                self.update_frame.emit(pixels)
 
                 # wait until it is time to display the next frame
                 next_frame_time += 1 / self.fps
