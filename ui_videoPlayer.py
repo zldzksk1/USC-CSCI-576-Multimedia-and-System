@@ -46,6 +46,10 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
+#import librosa
+#import soundfile
+#import io
+#from scipy.io import wavfile
 
 SHOT_THRESHOLD = 18 #MAD #Please Adjust later
 SAME_SHOT_WINDOWS = 30 #Number of Index we assume the same shots #Please Adjust later
@@ -540,9 +544,42 @@ class Ui_Dialog(object):
             
             print(f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix[i - 1, i]}")
 
-    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
-        # Load WAV file and get audio properties
-        wave_file = wave.open('output_background.wav', 'rb')
+    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate): 
+        '''
+        Try to use background sound only.
+        
+        # Load the audio file
+        y, sr = librosa.load(str(audioPath))
+
+        # Separate the harmonic and percussive components
+        y_harmonic, y_percussive = librosa.effects.hpss(y)
+
+        # Export the separated audio as WAV files
+        #soundfile.write('output_background.wav', y_harmonic, sr, subtype='PCM_16')
+    
+        sampling_rate = 44100  # Set your desired sampling rate
+
+        # Normalize audio_data to int16 range and cast it to int16
+        audio_data_int16 = np.int16(y_harmonic / np.max(np.abs(y_harmonic)) * 32767)
+
+        # Create a BytesIO object to store the audio data in memory
+        output_buffer = io.BytesIO()
+        wavfile.write(output_buffer, sampling_rate, audio_data_int16)
+        
+        output_buffer.seek(0)  # Reset the buffer's position to the beginning
+
+        with wave.open(output_buffer, 'rb') as wave_read:
+            # Now you can access the wave_read object to manipulate the audio data
+            print("Number of channels:", wave_read.getnchannels())
+            print("Sample width:", wave_read.getsampwidth())
+            print("Frame rate (frames per second):", wave_read.getframerate())
+            print("Number of frames:", wave_read.getnframes())
+            print("Parameters:", wave_read.getparams())
+        
+        wave_file = wave_read
+        '''
+        wave_file = wave.open((str(audioPath)), 'rb')  # We need to change to utilize only background sound
+    
         audio_frame_rate = wave_file.getframerate()
 
         # Define the start and end frame indices and window size for detecting sudden volume changes
@@ -554,8 +591,8 @@ class Ui_Dialog(object):
         threshold = 0.5  # 10% change in volume
 
         # Loop through the audio in the specified range and detect sudden volume changes
+        num = 1
         for i in range(start_audio_idx, end_audio_idx, window_size):
-            num = 1
             data = wave_file.readframes(window_size)
             data_np = np.frombuffer(data, dtype=np.int16)
             rms = np.sqrt(np.mean(data_np**2))
@@ -564,11 +601,18 @@ class Ui_Dialog(object):
                 prev_data_np = np.frombuffer(prev_data, dtype=np.int16)
                 prev_rms = np.sqrt(np.mean(prev_data_np**2))
                 if abs(rms - prev_rms) > prev_rms * threshold:
+                    # Add First Index
+                    if num == 1:
+                        video_idx = int(start_audio_idx * frame_rate / audio_frame_rate)
+                        self.index_labels.append("                    Subshot " + str(num))
+                        self.index_frames.append(video_idx)
+                        num += 1
                     video_idx = int(i * frame_rate / audio_frame_rate)
                     self.index_labels.append("                    Subshot " + str(num))
                     self.index_frames.append(video_idx)
+                    num += 1
             wave_file.setpos(i)
-            num += 1
+            #num += 1
 
         wave_file.close()
 
