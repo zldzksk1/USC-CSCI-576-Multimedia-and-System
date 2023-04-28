@@ -47,18 +47,33 @@ from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-SHOT_THRESHOLD = 20
-SAME_SHOT_WINDOWS = 10
-SCENE_THRESHOLD = 0.65
+SHOT_THRESHOLD = 15 #MAD
+SAME_SHOT_WINDOWS = 30 #Number of Index we assume the same shots
+SCENE_THRESHOLD = 0.75 #Similarity
+
 
 # Function to extract color histogram features from an image
 def extract_color_histogram_features(img, bins=8):
     #if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
     #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
+    
     hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
+'''
+# Function to extract color histogram features from an image (HSV) version
+def extract_color_histogram_features(frame, bins=16, color_space='hsv'):
+    if color_space == 'hsv':
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    elif color_space == 'lab':
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab)
+    elif color_space == 'ycrcb':
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
 
+    hist = cv2.calcHist([frame], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    cv2.normalize(hist, hist)
+    return hist.flatten()
+'''
 # Function to extract HOG features from an image
 def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
     #gray_img=img
@@ -253,9 +268,13 @@ class Ui_Dialog(object):
         self.num_frames = (int)(self.calNumOfFrame())
         
         self.shot_frame_idx = []
-        self.shot_frames_gray = []
-        self.shot_frames_bgr = []
+        self.shot_frames_gray = []  #Shot's start frames(gray)  
+        self.shot_frames_bgr = []  #Shot's start frames(bgr)        
+        self.bgr_frames = []    #All frames(bgr)
+        self.shot_frames_mean_bgr = [] #Shot's mean values of frames(bgr)   
+        self.shot_frames_med_bgr = [] #Shot's median frame(bgr)     
 
+        # For String view list
         self.index_labels = []
         self.index_frames = []
 
@@ -359,6 +378,7 @@ class Ui_Dialog(object):
                 # convert the RGB scale to Grey scale                
                 bgr_image = pixels
                 gray_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
+                self.bgr_frames.append(pixels)
 
                 # calculate the pixel difference between two frames
                 if i > 0:
@@ -372,9 +392,9 @@ class Ui_Dialog(object):
                                ", MAD: ", mad,
                                ", Frame Index: ", i)
                         if (i - self.shot_frame_idx[shot_number-1] <= SAME_SHOT_WINDOWS):
-                            print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
-                            self.shot_frame_idx[shot_number-1] = i
-                            #print("We have the same shots between same_shot_windows. Skip it!!")
+                            #print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                            #self.shot_frame_idx[shot_number-1] = i
+                            print("We have the same shots between same_shot_windows. Skip it!!")
                         else :
                             # Add it to the array.
                             shot_number = shot_number + 1
@@ -393,12 +413,67 @@ class Ui_Dialog(object):
                 prev_gray_image = gray_image.copy()
 
     def extractScenes(self):
-        # Extract features from frames
-        frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames_bgr])
+        '''
+        # Calculate the mean of shots
+        start_idx = 0
+        end_idx = 0
+        loop_count = len(self.shot_frame_idx)
+        shot_frames = []
 
+        for i in range(loop_count):
+            start_idx = self.shot_frame_idx[i]
+            
+            if i < loop_count - 1:  # If not the last shot
+                end_idx = self.shot_frame_idx[i + 1]-1
+            else:  # Last shot
+                end_idx = self.num_frames
+
+            print(f"idx: {start_idx},{end_idx}")
+            shot_frames = self.bgr_frames[start_idx:end_idx]
+            
+            # Calculate the mean of shot frames along the 0-th axis (time)
+            mean_of_shots = np.mean(shot_frames, axis=0, dtype=np.uint8)
+            
+            self.shot_frames_mean_bgr.append(mean_of_shots)
+
+        # For test
+        #np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+        #print("self.shot_frames_bgr:", self.shot_frames_bgr)
+        #print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
+        '''
+        # Calculate the mean of shots
+        start_idx = 0
+        end_idx = 0
+        loop_count = len(self.shot_frame_idx)
+        shot_frames = []
+
+        for i in range(loop_count):
+            start_idx = self.shot_frame_idx[i]
+            
+            if i < loop_count - 1:  # If not the last shot
+                end_idx = self.shot_frame_idx[i + 1]-1
+            else:  # Last shot
+                end_idx = self.num_frames
+
+            med_idx = (start_idx+end_idx) // 2
+            
+            self.shot_frames_med_bgr.append(self.bgr_frames[med_idx])
+
+        # For test
+        #np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+        #print("self.shot_frames_bgr:", self.shot_frames_bgr)
+        #print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
+        ''''''
+        
+        # Extract features from frames
+        #frame_features = np.vstack([np.hstack((extract_color_histogram_features(mean_frame), extract_hog_features(first_frame))) for mean_frame,first_frame in zip(self.shot_frames_mean_bgr, self.shot_frames_mean_bgr)])
+        #frame_features = np.vstack([np.hstack((extract_color_histogram_features(first_frame), extract_hog_features(first_frame))) for first_frame in self.shot_frames_bgr])
+        #frame_features = np.vstack([extract_color_histogram_features(first_frame) for first_frame in self.shot_frames_bgr])
+        frame_features = np.vstack([extract_color_histogram_features(med_frame) for med_frame in self.shot_frames_med_bgr])
 
         # Calculate similarity matrix
         similarity_matrix = cosine_similarity(frame_features)
+
 
         # Group shots into scenes using a threshold    
         shotNum = 1
@@ -415,23 +490,23 @@ class Ui_Dialog(object):
         frame_idx = frame_idx + 1
 
         for i in range(1, len(self.shot_frames_bgr)):
-            print(similarity_matrix[i - 1, i])
             if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
                 current_scene.append(self.shot_frames_bgr[i])
-                shotNum = shotNum + 1
+                shotNum = shotNum + 1                
                 
                 #Save Index labels and related frame_idx
                 self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
                 frame_idx = frame_idx + 1
-                print(f"frame_idx {frame_idx}")
+                
+                
+                print(f"Index {sceneNum}-{shotNum}: {similarity_matrix[i - 1, i]}")
             else:
                 #scenes.append(current_scene)
                 current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
                 shotNum = 1
-
-                print(f"frame_idx {frame_idx}")
+                
                 #Save Index labels and related frame_idx
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
@@ -439,6 +514,8 @@ class Ui_Dialog(object):
                 self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
                 frame_idx = frame_idx + 1        
+                
+                print(f"Index {sceneNum}-{shotNum}: {similarity_matrix[i - 1, i]}")
 
     @Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
