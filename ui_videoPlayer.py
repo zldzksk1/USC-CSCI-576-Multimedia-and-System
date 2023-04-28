@@ -52,18 +52,24 @@ SAME_SHOT_WINDOWS = 10
 SCENE_THRESHOLD = 0.65
 
 # Function to extract color histogram features from an image
+
+
 def extract_color_histogram_features(img, bins=8):
-    #if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+    # if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
     #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
-    hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    hist = cv2.calcHist([img], [0, 1, 2], None, [
+                        bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
 
 # Function to extract HOG features from an image
+
+
 def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
-    #gray_img=img
+    # gray_img=img
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    hog_features = hog(gray_img, orientations=9, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
+    hog_features = hog(gray_img, orientations=9,
+                       pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
     return hog_features
 
 
@@ -80,7 +86,7 @@ def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
 class VideoThread(QThread):
     update_frame = Signal(np.ndarray)
 
-    def __init__(self, file_path: str, width: int, height: int, num_frames: int, fps: int, startIdx: int):
+    def __init__(self, file_path: str, width: int, height: int, num_frames: int, fps: int, startIdx: int, index_frames: list, listView: QListView):
         super().__init__()
 
         self.file_path = file_path
@@ -93,18 +99,27 @@ class VideoThread(QThread):
         self.stop_event = False
         self.start_frame_idx = startIdx
         self.pause_time = 0
+        self.index_frames = index_frames
+        self.listView = listView
 
     def run(self):
         # open the video file for reading
         with open(self.file_path, "rb") as file:
 
-            #Set the start frame
+            # Set the start frame
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             next_frame_time = time.monotonic()
 
+            # current selected index on listView
+            if self.listView.currentIndex().row() != -1:
+                curr_idx = self.listView.currentIndex().row()
+            else:
+                curr_idx = 0
+
             # read each frame of the video and display it
-            for i in range(self.start_frame_idx, self.num_frames):
+            curr_frame_number = self.start_frame_idx
+            while curr_frame_number < self.num_frames:
 
                 while self.threadPaused:
                     time.sleep(0.1)
@@ -122,9 +137,23 @@ class VideoThread(QThread):
                 # emit a signal with the current frame data
                 self.update_frame.emit(pixels)
 
+                # update the listView to the corresponding to the current frame
+                # print(
+                #     f'curr_frame_number: {curr_frame_number}, self.index_frames[{curr_idx}]: {self.index_frames[curr_idx]}')
+                if curr_frame_number == self.index_frames[curr_idx]:
+                    # Whatever it is scene->shot, shot->subshot, if they have same frame number, the last one should be selected.
+                    while curr_frame_number == self.index_frames[curr_idx+1] and curr_idx < self.num_frames:
+                        curr_idx += 1
+
+                    model = self.listView.model()
+                    new_idx = model.index(curr_idx)
+                    self.listView.setCurrentIndex(new_idx)
+
+                    curr_idx += 1
+
                 # wait until it is time to display the next frame
                 next_frame_time += 1 / self.fps
-                
+
                 time_diff = time.monotonic() - next_frame_time
                 if time_diff > 0:
                     next_frame_time += time_diff
@@ -132,6 +161,10 @@ class VideoThread(QThread):
                 # wait until it is time to display the next frame
                 sleep_time = max(next_frame_time - time.monotonic(), 0)
                 time.sleep(sleep_time)
+
+                curr_frame_number += 1
+
+            # End while
 
     def stop(self):
         # set the signal to break for loop
@@ -188,7 +221,7 @@ class AudioThread(QThread):
         audio_array = np.frombuffer(data, dtype=np.int16)
 
         while data != b'' and not self.stop_event:
-            
+
             # when video is paused
             while self.thread_paused:
                 time.sleep(0.1)
@@ -216,6 +249,7 @@ class AudioThread(QThread):
         self.quit()
         self.finished.emit()
 
+
 class VideoWidget(QWidget):
 
     def __init__(self, parent=None):
@@ -241,17 +275,17 @@ class VideoWidget(QWidget):
 
 
 class Ui_Dialog(object):
-    
+
     def __init__(self, Dialog, args):
         print("Parameters: ", args)
 
         # define the path to the RGB video file and the video parameters
         self.video_file_path = Path(args[1])
-        self.audio_file_path = Path(args[2]) 
+        self.audio_file_path = Path(args[2])
         self.width, self.height = 480, 270
         self.fps = 30
         self.num_frames = (int)(self.calNumOfFrame())
-        
+
         self.shot_frame_idx = []
         self.shot_frames_gray = []
         self.shot_frames_bgr = []
@@ -331,7 +365,7 @@ class Ui_Dialog(object):
         cv2.destroyAllWindows()
 
     def calNumOfFrame(self):
-        width, height =  self.width, self.height
+        width, height = self.width, self.height
         num_channels = 3
         bits_per_channel = 8
 
@@ -356,7 +390,7 @@ class Ui_Dialog(object):
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
                     (self.height, self.width, 3))
 
-                # convert the RGB scale to Grey scale                
+                # convert the RGB scale to Grey scale
                 bgr_image = pixels
                 gray_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
 
@@ -369,16 +403,17 @@ class Ui_Dialog(object):
                     if mad > SHOT_THRESHOLD:
                         # Print MAD value
                         print("shot_number : ", shot_number+1,
-                               ", MAD: ", mad,
-                               ", Frame Index: ", i)
+                              ", MAD: ", mad,
+                              ", Frame Index: ", i)
                         if (i - self.shot_frame_idx[shot_number-1] <= SAME_SHOT_WINDOWS):
-                            print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                            print(
+                                "We have the same shots between same_shot_windows. Change past shot to new shot!!")
                             self.shot_frame_idx[shot_number-1] = i
                             #print("We have the same shots between same_shot_windows. Skip it!!")
-                        else :
+                        else:
                             # Add it to the array.
                             shot_number = shot_number + 1
-                            self.shot_frame_idx.append(i) 
+                            self.shot_frame_idx.append(i)
                             self.shot_frames_gray.append(gray_image)
                             self.shot_frames_bgr.append(bgr_image)
 
@@ -394,19 +429,19 @@ class Ui_Dialog(object):
 
     def extractScenes(self):
         # Extract features from frames
-        frame_features = np.vstack([np.hstack((extract_color_histogram_features(frame), extract_hog_features(frame))) for frame in self.shot_frames_bgr])
-
+        frame_features = np.vstack([np.hstack((extract_color_histogram_features(
+            frame), extract_hog_features(frame))) for frame in self.shot_frames_bgr])
 
         # Calculate similarity matrix
         similarity_matrix = cosine_similarity(frame_features)
 
-        # Group shots into scenes using a threshold    
+        # Group shots into scenes using a threshold
         shotNum = 1
         sceneNum = 1
         frame_idx = 0
         current_scene = [self.shot_frames_bgr[0]]
 
-        #Save Index labels and related frame_idx
+        # Save Index labels and related frame_idx
         self.index_labels.append("Scene 1")
         self.index_frames.append(self.shot_frame_idx[frame_idx])
 
@@ -419,26 +454,26 @@ class Ui_Dialog(object):
             if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
                 current_scene.append(self.shot_frames_bgr[i])
                 shotNum = shotNum + 1
-                
-                #Save Index labels and related frame_idx
+
+                # Save Index labels and related frame_idx
                 self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
                 frame_idx = frame_idx + 1
                 print(f"frame_idx {frame_idx}")
             else:
-                #scenes.append(current_scene)
+                # scenes.append(current_scene)
                 current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
                 shotNum = 1
 
                 print(f"frame_idx {frame_idx}")
-                #Save Index labels and related frame_idx
+                # Save Index labels and related frame_idx
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
 
                 self.index_labels.append("          Shot "+str(shotNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
-                frame_idx = frame_idx + 1        
+                frame_idx = frame_idx + 1
 
     @Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
@@ -456,7 +491,8 @@ class Ui_Dialog(object):
 
             # create a thread to read the video and emit signals with the frame data
             self.video_thread = VideoThread(
-                self.video_file_path, self.width, self.height, self.num_frames, self.fps, self.start_frame_idx)
+                self.video_file_path, self.width, self.height, self.num_frames, self.fps, self.start_frame_idx,
+                self.index_frames, self.listView)
             self.video_thread.update_frame.connect(self.update_frame)
 
             # start the thread to read the video
@@ -524,7 +560,7 @@ class Ui_Dialog(object):
 
         idx = self.listView.currentIndex().row()
         frame_idx = self.index_frames[idx]
-        print("idx: ",idx)
+        print("idx: ", idx)
 
         # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
@@ -556,7 +592,7 @@ class Ui_Dialog(object):
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
         self.play_video()
-    
+
     def close(self):
 
         # wait for the both two threads to finish or be killed
