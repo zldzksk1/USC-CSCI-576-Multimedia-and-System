@@ -513,6 +513,8 @@ class Ui_Dialog(object):
         self.index_frames.append(self.shot_frame_idx[frame_idx])
         frame_idx = frame_idx + 1
 
+        self.detect_abrupt_sound_change(self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
+
         for i in range(1, len(self.shot_frames_bgr)):
             if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
                 current_scene.append(self.shot_frames_bgr[i])
@@ -531,9 +533,44 @@ class Ui_Dialog(object):
             #Save Index labels and related frame_idx
             self.index_labels.append("          Shot "+str(shotNum))
             self.index_frames.append(self.shot_frame_idx[frame_idx])
-            frame_idx = frame_idx + 1        
-                
+            frame_idx = frame_idx + 1  
+
+            if(len(self.shot_frame_idx) > frame_idx):
+                    self.detect_abrupt_sound_change(self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)   
+            
             print(f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix[i - 1, i]}")
+
+    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
+        # Load WAV file and get audio properties
+        wave_file = wave.open('output_background.wav', 'rb')
+        audio_frame_rate = wave_file.getframerate()
+
+        # Define the start and end frame indices and window size for detecting sudden volume changes
+        start_frame_idx = start_video_frame_idx  # start at the 500th frame
+        end_frame_idx = end_video_frame_idx  # end at the 1000th frame
+        start_audio_idx = int(start_frame_idx * audio_frame_rate / frame_rate)
+        end_audio_idx = int(end_frame_idx * audio_frame_rate / frame_rate)
+        window_size = int(audio_frame_rate * 1)  # window size of 0.5 seconds
+        threshold = 0.5  # 10% change in volume
+
+        # Loop through the audio in the specified range and detect sudden volume changes
+        for i in range(start_audio_idx, end_audio_idx, window_size):
+            num = 1
+            data = wave_file.readframes(window_size)
+            data_np = np.frombuffer(data, dtype=np.int16)
+            rms = np.sqrt(np.mean(data_np**2))
+            if i > start_audio_idx:
+                prev_data = wave_file.readframes(window_size)
+                prev_data_np = np.frombuffer(prev_data, dtype=np.int16)
+                prev_rms = np.sqrt(np.mean(prev_data_np**2))
+                if abs(rms - prev_rms) > prev_rms * threshold:
+                    video_idx = int(i * frame_rate / audio_frame_rate)
+                    self.index_labels.append("                    Subshot " + str(num))
+                    self.index_frames.append(video_idx)
+            wave_file.setpos(i)
+            num += 1
+
+        wave_file.close()
 
     @Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
