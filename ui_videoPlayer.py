@@ -51,19 +51,22 @@ from sklearn.metrics.pairwise import cosine_similarity
 #import io
 #from scipy.io import wavfile
 
-SHOT_THRESHOLD = 18 #MAD #Please Adjust later
-SAME_SHOT_WINDOWS = 30 #Number of Index we assume the same shots #Please Adjust later
-SCENE_THRESHOLD = 0.60 #Similarity #Please Adjust later
+SHOT_THRESHOLD = 18  # MAD #Please Adjust later
+SAME_SHOT_WINDOWS = 30  # Number of Index we assume the same shots #Please Adjust later
+SCENE_THRESHOLD = 0.60  # Similarity #Please Adjust later
 
 
 # Function to extract color histogram features from an image
 def extract_color_histogram_features(img, bins=8):
-    #if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
+    # if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
     #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
-    
-    hist = cv2.calcHist([img], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+
+    hist = cv2.calcHist([img], [0, 1, 2], None, [
+                        bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
+
+
 '''
 # Function to extract color histogram features from an image (HSV) version
 def extract_color_histogram_features(frame, bins=16, color_space='hsv'):
@@ -78,13 +81,18 @@ def extract_color_histogram_features(frame, bins=16, color_space='hsv'):
     return hist.flatten()
 '''
 # Function to extract HOG features from an image
+
+
 def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
-    #gray_img=img
+    # gray_img=img
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    hog_features = hog(gray_img, orientations=9, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
+    hog_features = hog(gray_img, orientations=9,
+                       pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
     return hog_features
 
 # Calculate Absolute Difference
+
+
 def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
     # Calculate absolute difference betweeb two continuous frames
     abs_diff = cv2.absdiff(img1, img2)
@@ -117,7 +125,7 @@ class VideoThread(QThread):
         # open the video file for reading
         with open(self.file_path, "rb") as file:
 
-            #Set the start frame
+            # Set the start frame
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             next_frame_time = time.monotonic()
@@ -164,7 +172,7 @@ class VideoThread(QThread):
 
                 # wait until it is time to display the next frame
                 next_frame_time += 1 / self.fps
-                
+
                 time_diff = time.monotonic() - next_frame_time
                 if time_diff > 0:
                     next_frame_time += time_diff
@@ -232,7 +240,7 @@ class AudioThread(QThread):
         audio_array = np.frombuffer(data, dtype=np.int16)
 
         while data != b'' and not self.stop_event:
-            
+
             # when video is paused
             while self.thread_paused:
                 time.sleep(0.1)
@@ -260,6 +268,7 @@ class AudioThread(QThread):
         self.quit()
         self.finished.emit()
 
+
 class VideoWidget(QWidget):
 
     def __init__(self, parent=None):
@@ -285,24 +294,24 @@ class VideoWidget(QWidget):
 
 
 class Ui_Dialog(object):
-    
+
     def __init__(self, Dialog, args):
         print("Parameters: ", args)
 
         # define the path to the RGB video file and the video parameters
         self.video_file_path = Path(args[1])
-        self.audio_file_path = Path(args[2]) 
+        self.audio_file_path = Path(args[2])
         self.width, self.height = 480, 270
         self.fps = 30
         self.num_frames = (int)(self.calNumOfFrame())
         print(f"self.num_frames : {self.num_frames}")
-        
+
         self.shot_frame_idx = []
-        self.shot_frames_gray = []  #Shot's start frames(gray)  
-        self.shot_frames_bgr = []  #Shot's start frames(bgr)        
-        self.bgr_frames = []    #All frames(bgr)
-        self.shot_frames_mean_bgr = [] #Shot's mean values of frames(bgr)   
-        self.shot_frames_med_bgr = [] #Shot's median frame(bgr)     
+        self.shot_frames_gray = []  # Shot's start frames(gray)
+        self.shot_frames_bgr = []  # Shot's start frames(bgr)
+        self.bgr_frames = []  # All frames(bgr)
+        self.shot_frames_mean_bgr = []  # Shot's mean values of frames(bgr)
+        self.shot_frames_med_bgr = []  # Shot's median frame(bgr)
 
         # For String view list
         self.index_labels = []
@@ -380,7 +389,7 @@ class Ui_Dialog(object):
         cv2.destroyAllWindows()
 
     def calNumOfFrame(self):
-        width, height =  self.width, self.height
+        width, height = self.width, self.height
         num_channels = 3
         bits_per_channel = 8
 
@@ -405,7 +414,7 @@ class Ui_Dialog(object):
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
                     (self.height, self.width, 3))
 
-                # convert the RGB scale to Grey scale                
+                # convert the RGB scale to Grey scale
                 bgr_image = pixels
                 gray_image = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY)
                 self.bgr_frames.append(pixels)
@@ -419,16 +428,17 @@ class Ui_Dialog(object):
                     if mad > SHOT_THRESHOLD:
                         # Print MAD value
                         print("shot_number : ", shot_number+1,
-                               ", MAD: ", mad,
-                               ", Frame Index: ", i)
+                              ", MAD: ", mad,
+                              ", Frame Index: ", i)
                         if (i - self.shot_frame_idx[shot_number-1] <= SAME_SHOT_WINDOWS):
                             #print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
                             #self.shot_frame_idx[shot_number-1] = i
-                            print("We have the same shots between same_shot_windows. Skip it!!")
-                        else :
+                            print(
+                                "We have the same shots between same_shot_windows. Skip it!!")
+                        else:
                             # Add it to the array.
                             shot_number = shot_number + 1
-                            self.shot_frame_idx.append(i) 
+                            self.shot_frame_idx.append(i)
                             self.shot_frames_gray.append(gray_image)
                             self.shot_frames_bgr.append(bgr_image)
 
@@ -451,17 +461,17 @@ class Ui_Dialog(object):
         shot_frames = []
         for i in range(loop_count):
             start_idx = self.shot_frame_idx[i]
-            
+
             if i < loop_count - 1:  # If not the last shot
                 end_idx = self.shot_frame_idx[i + 1]-1
             else:  # Last shot
                 end_idx = self.num_frames
             print(f"idx: {start_idx},{end_idx}")
             shot_frames = self.bgr_frames[start_idx:end_idx]
-            
+
             # Calculate the mean of shot frames along the 0-th axis (time)
             mean_of_shots = np.mean(shot_frames, axis=0, dtype=np.uint8)
-            
+
             self.shot_frames_mean_bgr.append(mean_of_shots)
         # For test
         #np.set_printoptions(linewidth=np.inf, threshold=np.inf)
@@ -476,14 +486,14 @@ class Ui_Dialog(object):
 
         for i in range(loop_count):
             start_idx = self.shot_frame_idx[i]
-            
+
             if i < loop_count - 1:  # If not the last shot
                 end_idx = self.shot_frame_idx[i + 1]-1
             else:  # Last shot
                 end_idx = self.num_frames
 
             med_idx = (start_idx+end_idx) // 2
-            
+
             self.shot_frames_med_bgr.append(self.bgr_frames[med_idx])
 
         # For test
@@ -491,25 +501,25 @@ class Ui_Dialog(object):
         #print("self.shot_frames_bgr:", self.shot_frames_bgr)
         #print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
         ''''''
-        
+
         # Extract features from frames
         #frame_features = np.vstack([np.hstack((extract_color_histogram_features(mean_frame), extract_hog_features(first_frame))) for mean_frame,first_frame in zip(self.shot_frames_mean_bgr, self.shot_frames_mean_bgr)])
         #frame_features = np.vstack([np.hstack((extract_color_histogram_features(first_frame), extract_hog_features(first_frame))) for first_frame in self.shot_frames_bgr])
         #frame_features = np.vstack([extract_color_histogram_features(first_frame) for first_frame in self.shot_frames_bgr])
         #frame_features = np.vstack([extract_color_histogram_features(med_frame) for med_frame in self.shot_frames_med_bgr])
-        frame_features = np.vstack([np.hstack((extract_color_histogram_features(med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
+        frame_features = np.vstack([np.hstack((extract_color_histogram_features(
+            med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
 
         # Calculate similarity matrix
         similarity_matrix = cosine_similarity(frame_features)
 
-
-        # Group shots into scenes using a threshold    
+        # Group shots into scenes using a threshold
         shotNum = 1
         sceneNum = 1
         frame_idx = 0
         current_scene = [self.shot_frames_bgr[0]]
 
-        #Save Index labels and related frame_idx
+        # Save Index labels and related frame_idx
         self.index_labels.append("Scene 1")
         self.index_frames.append(self.shot_frame_idx[frame_idx])
 
@@ -517,37 +527,40 @@ class Ui_Dialog(object):
         self.index_frames.append(self.shot_frame_idx[frame_idx])
         frame_idx = frame_idx + 1
 
-        self.detect_abrupt_sound_change(self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
+        self.detect_abrupt_sound_change(
+            self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
         for i in range(1, len(self.shot_frames_bgr)):
             if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
                 current_scene.append(self.shot_frames_bgr[i])
-                shotNum = shotNum + 1                
-                                
+                shotNum = shotNum + 1
+
             else:
-                #scenes.append(current_scene)
+                # scenes.append(current_scene)
                 current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
                 shotNum = 1
-                
-                #Save Index labels and related frame_idx
+
+                # Save Index labels and related frame_idx
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
 
-            #Save Index labels and related frame_idx
+            # Save Index labels and related frame_idx
             self.index_labels.append("          Shot "+str(shotNum))
             self.index_frames.append(self.shot_frame_idx[frame_idx])
-            frame_idx = frame_idx + 1  
+            frame_idx = frame_idx + 1
 
             if(len(self.shot_frame_idx) > frame_idx):
-                    self.detect_abrupt_sound_change(self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)   
-            
-            print(f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix[i - 1, i]}")
+                self.detect_abrupt_sound_change(
+                    self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
-    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate): 
+            print(
+                f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix[i - 1, i]}")
+
+    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
         '''
         Try to use background sound only.
-        
+
         # Load the audio file
         y, sr = librosa.load(str(audioPath))
 
@@ -556,7 +569,7 @@ class Ui_Dialog(object):
 
         # Export the separated audio as WAV files
         #soundfile.write('output_background.wav', y_harmonic, sr, subtype='PCM_16')
-    
+
         sampling_rate = 44100  # Set your desired sampling rate
 
         # Normalize audio_data to int16 range and cast it to int16
@@ -565,7 +578,7 @@ class Ui_Dialog(object):
         # Create a BytesIO object to store the audio data in memory
         output_buffer = io.BytesIO()
         wavfile.write(output_buffer, sampling_rate, audio_data_int16)
-        
+
         output_buffer.seek(0)  # Reset the buffer's position to the beginning
 
         with wave.open(output_buffer, 'rb') as wave_read:
@@ -575,11 +588,12 @@ class Ui_Dialog(object):
             print("Frame rate (frames per second):", wave_read.getframerate())
             print("Number of frames:", wave_read.getnframes())
             print("Parameters:", wave_read.getparams())
-        
+
         wave_file = wave_read
         '''
-        wave_file = wave.open((str(audioPath)), 'rb')  # We need to change to utilize only background sound
-    
+        wave_file = wave.open(
+            (str(audioPath)), 'rb')  # We need to change to utilize only background sound
+
         audio_frame_rate = wave_file.getframerate()
 
         # Define the start and end frame indices and window size for detecting sudden volume changes
@@ -603,12 +617,15 @@ class Ui_Dialog(object):
                 if abs(rms - prev_rms) > prev_rms * threshold:
                     # Add First Index
                     if num == 1:
-                        video_idx = int(start_audio_idx * frame_rate / audio_frame_rate)
-                        self.index_labels.append("                    Subshot " + str(num))
+                        video_idx = int(start_audio_idx *
+                                        frame_rate / audio_frame_rate)
+                        self.index_labels.append(
+                            "                    Subshot " + str(num))
                         self.index_frames.append(video_idx)
                         num += 1
                     video_idx = int(i * frame_rate / audio_frame_rate)
-                    self.index_labels.append("                    Subshot " + str(num))
+                    self.index_labels.append(
+                        "                    Subshot " + str(num))
                     self.index_frames.append(video_idx)
                     num += 1
             wave_file.setpos(i)
@@ -701,7 +718,7 @@ class Ui_Dialog(object):
 
         idx = self.listView.currentIndex().row()
         frame_idx = self.index_frames[idx]
-        print("idx: ",idx)
+        print("idx: ", idx)
 
         # Call move_to_frame which kills running video and audio threads, and start new threads with the given frame index.
         self.move_to_frame(frame_idx)
@@ -720,8 +737,7 @@ class Ui_Dialog(object):
             self.start_frame_idx = 0
 
             # wait for the both two threads to finish or be killed
-            while self.video_thread.isRunning() or self.audio_thread.isRunning():
-                pass
+            time.sleep(0.5)
 
             # check if the tvideo and audio hreads were killed or has finished
             # Caution: make sure threads are killed before re-startint the thread.
@@ -733,16 +749,15 @@ class Ui_Dialog(object):
         # pass frame_idx into VideoThread and AudioThread to start Video and Audio
         self.start_frame_idx = frame_idx
         self.play_video()
-    
+
     def close(self):
 
-        # wait for the both two threads to finish or be killed
-        while self.video_thread.isRunning() or self.audio_thread.isRunning():
+        if self.start:
             self.video_thread.stop()
             self.audio_thread.stop()
 
+        time.sleep(0.5)
         # check if the tvideo and audio hreads were killed or has finished
-        # Caution: make sure threads are killed before re-startint the thread.
         if self.video_thread.isFinished() and self.audio_thread.isFinished():
             print("Threads ended properly")
         else:
