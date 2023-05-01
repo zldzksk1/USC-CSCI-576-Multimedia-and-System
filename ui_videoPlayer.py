@@ -52,10 +52,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 # from scipy.io import wavfile
 
 SHOT_THRESHOLD = 15  # MAD #Please Adjust later
-SAME_SHOT_WINDOWS = 30  # Number of Index we assume the same shots #Please Adjust later
+SAME_SHOT_WINDOWS = 15  # Number of Index we assume the same shots #Please Adjust later
 #SCENE_THRESHOLD = 0.60  # Similarity #Please Adjust later
-SCENE_THRESHOLD_COLOR_HIST = 0.6  # Similarity #Please Adjust later
-SCENE_THRESHOLD_HOG = 0.8  # Similarity #Please Adjust later
+SCENE_COEFF_COLOR_HIST = 0.5  # Similarity #Please Adjust later. The larger, The smaller threshold(One Scene has more shots)
+SCENE_COEFF_HOG = 0.81  # Similarity #Please Adjust later The larger, The smaller threshold(One Scene has more shots)
 
 
 # Function to extract color histogram features from an image
@@ -519,10 +519,13 @@ class Ui_Dialog(object):
         # frame_features = np.vstack([np.hstack((extract_color_histogram_features(
         #     med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
 
+        
+        candidate_frames_bgr = self.shot_frames_med_bgr
+        
         color_features = np.vstack([np.hstack((extract_color_histogram_features(
-            med_frame))) for med_frame in self.shot_frames_med_bgr])
+            frame))) for frame in candidate_frames_bgr])
         hog_features = np.vstack([np.hstack((extract_hog_features(
-            med_frame))) for med_frame in self.shot_frames_med_bgr])
+            frame))) for frame in candidate_frames_bgr])
 
         # Calculate similarity matrix
         similarity_matrix_color = cosine_similarity(color_features)
@@ -579,13 +582,17 @@ class Ui_Dialog(object):
             list(set(color_hist_scene_changes) | set(hog_scene_changes)))
         print(f'all_scene_changes: {all_scene_changes}')
         '''
-        for i in range(1, len(self.shot_frames_bgr)):
-            if similarity_matrix_color[i - 1, i] > (similarity_mean_color[i] - SCENE_THRESHOLD_COLOR_HIST * similarity_std_color[i]) \
-                    and similarity_matrix_hog[i - 1, i] > (similarity_mean_hog[i] - SCENE_THRESHOLD_HOG * similarity_std_hog[i]):
+        for i in range(1, len(self.shot_frames_med_bgr)):
+            if similarity_matrix_color[i - 1, i] > (similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]) \
+                    and similarity_matrix_hog[i - 1, i] > (similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]):
                 current_scene.append(self.shot_frames_bgr[i])
                 shotNum = shotNum + 1
 
             else:
+                if similarity_matrix_color[i - 1, i] <= (similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]):
+                    print("COLOR")
+                if similarity_matrix_hog[i - 1, i] <= (similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]):
+                    print("HOG")
                 # scenes.append(current_scene)
                 current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
@@ -605,7 +612,7 @@ class Ui_Dialog(object):
                 self.detect_abrupt_sound_change(
                     self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
-            print(f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_THRESHOLD_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_THRESHOLD_HOG * similarity_std_hog[i]}")
+            print(f"Index {sceneNum}-{shotNum}:({self.shot_frame_idx[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]}")
 
     def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
         '''
