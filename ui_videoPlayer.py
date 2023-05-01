@@ -46,10 +46,10 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
-# import librosa
-# import soundfile
-# import io
-# from scipy.io import wavfile
+import librosa
+import soundfile
+import io
+from scipy.io import wavfile
 
 SHOT_THRESHOLD = 15  # MAD #Please Adjust later
 SAME_SHOT_WINDOWS = 15  # Number of Index we assume the same shots #Please Adjust later
@@ -328,6 +328,9 @@ class Ui_Dialog(object):
         # For String view list
         self.index_labels = []
         self.index_frames = []
+        
+        # unvoiced_wave_file
+        self.unvoiced_wave_file = None
 
         if not Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
@@ -384,6 +387,11 @@ class Ui_Dialog(object):
         ###################
         self.searchShots()
 
+        ##########################
+        # Extract Unvoiced Audio
+        ##########################
+        #self.extractUnvoicedAudio()
+        
         ##########################
         # Extract Scene grouping shots
         ##########################
@@ -519,13 +527,14 @@ class Ui_Dialog(object):
         # frame_features = np.vstack([np.hstack((extract_color_histogram_features(
         #     med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
 
-        
-        candidate_frames_bgr = self.shot_frames_med_bgr
+        # Define candidate frames as median shots
+        candidate_color_frames_bgr = self.shot_frames_med_bgr
+        candidate_hog_frames_bgr = self.shot_frames_med_bgr
         
         color_features = np.vstack([np.hstack((extract_color_histogram_features(
-            frame))) for frame in candidate_frames_bgr])
+            frame))) for frame in candidate_color_frames_bgr])
         hog_features = np.vstack([np.hstack((extract_hog_features(
-            frame))) for frame in candidate_frames_bgr])
+            frame))) for frame in candidate_hog_frames_bgr])
 
         # Calculate similarity matrix
         similarity_matrix_color = cosine_similarity(color_features)
@@ -614,16 +623,21 @@ class Ui_Dialog(object):
 
             print(f"Index {sceneNum}-{shotNum}:({self.shot_frame_idx[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]}")
 
-    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
-        '''
-        Try to use background sound only.
+    def extractUnvoicedAudio(self):  
+        
+        print("Extracting Unvoiced Audio!!")  
+        #Try to use background sound only.
         # Load the audio file
-        y, sr = librosa.load(str(audioPath))
+        y, sr = librosa.load(str(self.audio_file_path))
         # Separate the harmonic and percussive components
         y_harmonic, y_percussive = librosa.effects.hpss(y)
         # Export the separated audio as WAV files
         # soundfile.write('output_background.wav', y_harmonic, sr, subtype='PCM_16')
         sampling_rate = 44100  # Set your desired sampling rate
+        #Write file
+        soundfile.write('background.wav', y_harmonic, sr)
+        
+        '''
         # Normalize audio_data to int16 range and cast it to int16
         audio_data_int16 = np.int16(
             y_harmonic / np.max(np.abs(y_harmonic)) * 32767)
@@ -638,11 +652,61 @@ class Ui_Dialog(object):
             print("Frame rate (frames per second):", wave_read.getframerate())
             print("Number of frames:", wave_read.getnframes())
             print("Parameters:", wave_read.getparams())
-        wave_file = wave_read
+        self.unvoiced_wave_file = wave_read
         '''
-        wave_file = wave.open(
-            (str(audioPath)), 'rb')  # We need to change to utilize only background sound
+        #self.unvoiced_wave_file = wave.open(("background.wav"), 'rb')  # We need to change to utilize only background sound
+        print("Finished extracting Unvoiced Audio!!")  
+        
+    def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
+        
+        '''
+        # Load the audio file
+        y, sr = librosa.load(str(audioPath))
 
+        # Compute short-time Fourier transform (STFT)
+        stft = librosa.stft(y)
+
+        # Compute spectral contrast
+        contrast = librosa.feature.spectral_contrast(S=np.abs(stft), sr=sr)
+
+        # Set a threshold for unvoiced/voiced distinction (you may need to adjust this value)
+        threshold = 20
+
+        # Identify unvoiced frames
+        unvoiced_frames = np.where(np.mean(contrast, axis=0) > threshold)[0]
+
+        # Create an empty signal to store the unvoiced part
+        unvoiced_signal = np.zeros_like(y)
+
+        # Extract the unvoiced part
+        frame_length = 1024  # You may need to adjust this value depending on the window size used in STFT
+        for frame in unvoiced_frames:
+            start = frame * frame_length
+            end = start + frame_length
+            unvoiced_signal[start:end] = y[start:end]
+
+        audio_data_int16 = np.int16(unvoiced_signal / np.max(np.abs(unvoiced_signal)) * 32767)
+        
+        output_buffer = io.BytesIO()
+        wavfile.write(output_buffer, sr, audio_data_int16)
+        output_buffer.seek(0)  # Reset the buffer's position to the beginning
+        with wave.open(output_buffer, 'rb') as wave_read:
+            # Now you can access the wave_read object to manipulate the audio data
+            print("Number of channels:", wave_read.getnchannels())
+            print("Sample width:", wave_read.getsampwidth())
+            print("Frame rate (frames per second):", wave_read.getframerate())
+            print("Number of frames:", wave_read.getnframes())
+            print("Parameters:", wave_read.getparams())
+        wave_file = wave_read
+        
+        '''
+        #wave_file = wave.open((str(audioPath)), 'rb')  # We need to change to utilize only background sound
+
+        #wave_file = self.unvoiced_wave_file
+        #wave_file = wave.open(("background.wav"), 'rb')
+        
+        wave_file = wave.open((str(audioPath)), 'rb')  # We need to change to utilize only background sound
+        
         audio_frame_rate = wave_file.getframerate()
 
         # Define the start and end frame indices and window size for detecting sudden volume changes
