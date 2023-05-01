@@ -40,20 +40,22 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 
 from PySide6.QtMultimedia import (QMediaPlayer)
 
-#from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
-#from tensorflow.keras.preprocessing import image
+# from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+# from tensorflow.keras.preprocessing import image
 
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
-#import librosa
-#import soundfile
-#import io
-#from scipy.io import wavfile
+# import librosa
+# import soundfile
+# import io
+# from scipy.io import wavfile
 
-SHOT_THRESHOLD = 18  # MAD #Please Adjust later
+SHOT_THRESHOLD = 15  # MAD #Please Adjust later
 SAME_SHOT_WINDOWS = 30  # Number of Index we assume the same shots #Please Adjust later
-SCENE_THRESHOLD = 0.60  # Similarity #Please Adjust later
+#SCENE_THRESHOLD = 0.60  # Similarity #Please Adjust later
+SCENE_THRESHOLD_COLOR_HIST = 0.6  # Similarity #Please Adjust later
+SCENE_THRESHOLD_HOG = 0.8  # Similarity #Please Adjust later
 
 
 # Function to extract color histogram features from an image
@@ -61,9 +63,17 @@ def extract_color_histogram_features(img, bins=8):
     # if len(img.shape) == 2 or img.shape[2] == 1:  # If the image is grayscale
     #    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)  # Convert grayscale to RGB
 
-    hist = cv2.calcHist([img], [0, 1, 2], None, [
-                        bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    # Convert the frame from BGR to HSV color space
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    # Calculate a 3D color histogram with 8 bins per channel
+    hist = cv2.calcHist([hsv], [0, 1, 2], None, [8, 8, 8],
+                        [0, 180, 0, 256, 0, 256])
+
+    # hist = cv2.calcHist([img], [0, 1, 2], None, [
+    #                     bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
+
     return hist.flatten()
 
 
@@ -76,7 +86,8 @@ def extract_color_histogram_features(frame, bins=16, color_space='hsv'):
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab)
     elif color_space == 'ycrcb':
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
-    hist = cv2.calcHist([frame], [0, 1, 2], None, [bins, bins, bins], [0, 256, 0, 256, 0, 256])
+    hist = cv2.calcHist([frame], [0, 1, 2], None, [
+                        bins, bins, bins], [0, 256, 0, 256, 0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
 '''
@@ -88,6 +99,7 @@ def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     hog_features = hog(gray_img, orientations=9,
                        pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
+
     return hog_features
 
 # Calculate Absolute Difference
@@ -412,7 +424,7 @@ class Ui_Dialog(object):
 
                 # convert the raw data to a numpy array of pixel values
                 pixels = np.frombuffer(raw_data, dtype=np.uint8).reshape(
-                    (self.height, self.width, 3))
+                    (self.height, self.width, 3))  # pixels is BGR format
 
                 # convert the RGB scale to Grey scale
                 bgr_image = pixels
@@ -431,8 +443,8 @@ class Ui_Dialog(object):
                               ", MAD: ", mad,
                               ", Frame Index: ", i)
                         if (i - self.shot_frame_idx[shot_number-1] <= SAME_SHOT_WINDOWS):
-                            #print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
-                            #self.shot_frame_idx[shot_number-1] = i
+                            # print("We have the same shots between same_shot_windows. Change past shot to new shot!!")
+                            # self.shot_frame_idx[shot_number-1] = i
                             print(
                                 "We have the same shots between same_shot_windows. Skip it!!")
                         else:
@@ -461,22 +473,19 @@ class Ui_Dialog(object):
         shot_frames = []
         for i in range(loop_count):
             start_idx = self.shot_frame_idx[i]
-
             if i < loop_count - 1:  # If not the last shot
                 end_idx = self.shot_frame_idx[i + 1]-1
             else:  # Last shot
                 end_idx = self.num_frames
             print(f"idx: {start_idx},{end_idx}")
             shot_frames = self.bgr_frames[start_idx:end_idx]
-
             # Calculate the mean of shot frames along the 0-th axis (time)
             mean_of_shots = np.mean(shot_frames, axis=0, dtype=np.uint8)
-
             self.shot_frames_mean_bgr.append(mean_of_shots)
         # For test
-        #np.set_printoptions(linewidth=np.inf, threshold=np.inf)
-        #print("self.shot_frames_bgr:", self.shot_frames_bgr)
-        #print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
+        # np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+        # print("self.shot_frames_bgr:", self.shot_frames_bgr)
+        # print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
         '''
         # Calculate the mean of shots
         start_idx = 0
@@ -497,21 +506,36 @@ class Ui_Dialog(object):
             self.shot_frames_med_bgr.append(self.bgr_frames[med_idx])
 
         # For test
-        #np.set_printoptions(linewidth=np.inf, threshold=np.inf)
-        #print("self.shot_frames_bgr:", self.shot_frames_bgr)
-        #print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
+        np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+        # print("self.shot_frames_bgr:", self.shot_frames_bgr)
+        # print("self.shot_frames_mean_bgr:", self.shot_frames_mean_bgr)
         ''''''
 
         # Extract features from frames
-        #frame_features = np.vstack([np.hstack((extract_color_histogram_features(mean_frame), extract_hog_features(first_frame))) for mean_frame,first_frame in zip(self.shot_frames_mean_bgr, self.shot_frames_mean_bgr)])
-        #frame_features = np.vstack([np.hstack((extract_color_histogram_features(first_frame), extract_hog_features(first_frame))) for first_frame in self.shot_frames_bgr])
-        #frame_features = np.vstack([extract_color_histogram_features(first_frame) for first_frame in self.shot_frames_bgr])
-        #frame_features = np.vstack([extract_color_histogram_features(med_frame) for med_frame in self.shot_frames_med_bgr])
-        frame_features = np.vstack([np.hstack((extract_color_histogram_features(
-            med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
+        # frame_features = np.vstack([np.hstack((extract_color_histogram_features(mean_frame), extract_hog_features(first_frame))) for mean_frame,first_frame in zip(self.shot_frames_mean_bgr, self.shot_frames_mean_bgr)])
+        # frame_features = np.vstack([np.hstack((extract_color_histogram_features(first_frame), extract_hog_features(first_frame))) for first_frame in self.shot_frames_bgr])
+        # frame_features = np.vstack([extract_color_histogram_features(first_frame) for first_frame in self.shot_frames_bgr])
+        # frame_features = np.vstack([extract_color_histogram_features(med_frame) for med_frame in self.shot_frames_med_bgr])
+        # frame_features = np.vstack([np.hstack((extract_color_histogram_features(
+        #     med_frame), extract_hog_features(med_frame))) for med_frame in self.shot_frames_med_bgr])
+
+        color_features = np.vstack([np.hstack((extract_color_histogram_features(
+            med_frame))) for med_frame in self.shot_frames_med_bgr])
+        hog_features = np.vstack([np.hstack((extract_hog_features(
+            med_frame))) for med_frame in self.shot_frames_med_bgr])
 
         # Calculate similarity matrix
-        similarity_matrix = cosine_similarity(frame_features)
+        similarity_matrix_color = cosine_similarity(color_features)
+        similarity_matrix_hog = cosine_similarity(hog_features)
+
+        # Compute the mean and standard deviation of the distances for each feature
+        similarity_mean_color = [np.mean(shot)
+                                 for shot in similarity_matrix_color]
+        similarity_std_color = [np.std(shot)
+                                for shot in similarity_matrix_color]
+        similarity_mean_hog = [np.mean(shot)
+                               for shot in similarity_matrix_hog]
+        similarity_std_hog = [np.std(shot) for shot in similarity_matrix_hog]
 
         # Group shots into scenes using a threshold
         shotNum = 1
@@ -530,8 +554,34 @@ class Ui_Dialog(object):
         self.detect_abrupt_sound_change(
             self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
+        '''
+        ###############
+        # Apply a threshold for Color Histogram, Hog features
+        ###############
+        # Compute the distances between adjacent frames for each feature
+        color_hist_dists = [np.linalg.norm(
+            color_features[i] - color_features[i-1]) for i in range(1, len(color_features))]
+        hog_dists = [np.linalg.norm(hog_features[i] - hog_features[i-1])
+                     for i in range(1, len(hog_features))]
+        # Compute the mean and standard deviation of the distances for each feature
+        color_hist_mean = np.mean(color_hist_dists)
+        color_hist_std = np.std(color_hist_dists)
+        hog_mean = np.mean(hog_dists)
+        hog_std = np.std(hog_dists)
+        # Apply a threshold to the distances to detect scene changes
+        color_hist_scene_changes = np.where(
+            color_hist_dists > color_hist_mean + 2*color_hist_std)[0] + 1
+        print(f'color_hist_scene_changes: {color_hist_scene_changes}')
+        hog_scene_changes = np.where(hog_dists > hog_mean + 2*hog_std)[0] + 1
+        print(f'hog_scene_changes: {hog_scene_changes}')
+        # Combine the scene change points from the two features
+        all_scene_changes = sorted(
+            list(set(color_hist_scene_changes) | set(hog_scene_changes)))
+        print(f'all_scene_changes: {all_scene_changes}')
+        '''
         for i in range(1, len(self.shot_frames_bgr)):
-            if similarity_matrix[i - 1, i] > SCENE_THRESHOLD:
+            if similarity_matrix_color[i - 1, i] > (similarity_mean_color[i] - SCENE_THRESHOLD_COLOR_HIST * similarity_std_color[i]) \
+                    and similarity_matrix_hog[i - 1, i] > (similarity_mean_hog[i] - SCENE_THRESHOLD_HOG * similarity_std_hog[i]):
                 current_scene.append(self.shot_frames_bgr[i])
                 shotNum = shotNum + 1
 
@@ -542,11 +592,12 @@ class Ui_Dialog(object):
                 shotNum = 1
 
                 # Save Index labels and related frame_idx
+                print("Scene Changed!!")
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
 
             # Save Index labels and related frame_idx
-            self.index_labels.append("          Shot "+str(shotNum))
+            self.index_labels.append("          Shot "+str(shotNum) +"_temp:"+str(i))
             self.index_frames.append(self.shot_frame_idx[frame_idx])
             frame_idx = frame_idx + 1
 
@@ -554,33 +605,25 @@ class Ui_Dialog(object):
                 self.detect_abrupt_sound_change(
                     self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
-            print(
-                f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix[i - 1, i]}")
+            print(f"Index {sceneNum}-{shotNum}:({self.index_frames[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_THRESHOLD_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_THRESHOLD_HOG * similarity_std_hog[i]}")
 
     def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
         '''
         Try to use background sound only.
-
         # Load the audio file
         y, sr = librosa.load(str(audioPath))
-
         # Separate the harmonic and percussive components
         y_harmonic, y_percussive = librosa.effects.hpss(y)
-
         # Export the separated audio as WAV files
-        #soundfile.write('output_background.wav', y_harmonic, sr, subtype='PCM_16')
-
+        # soundfile.write('output_background.wav', y_harmonic, sr, subtype='PCM_16')
         sampling_rate = 44100  # Set your desired sampling rate
-
         # Normalize audio_data to int16 range and cast it to int16
-        audio_data_int16 = np.int16(y_harmonic / np.max(np.abs(y_harmonic)) * 32767)
-
+        audio_data_int16 = np.int16(
+            y_harmonic / np.max(np.abs(y_harmonic)) * 32767)
         # Create a BytesIO object to store the audio data in memory
         output_buffer = io.BytesIO()
         wavfile.write(output_buffer, sampling_rate, audio_data_int16)
-
         output_buffer.seek(0)  # Reset the buffer's position to the beginning
-
         with wave.open(output_buffer, 'rb') as wave_read:
             # Now you can access the wave_read object to manipulate the audio data
             print("Number of channels:", wave_read.getnchannels())
@@ -588,7 +631,6 @@ class Ui_Dialog(object):
             print("Frame rate (frames per second):", wave_read.getframerate())
             print("Number of frames:", wave_read.getnframes())
             print("Parameters:", wave_read.getparams())
-
         wave_file = wave_read
         '''
         wave_file = wave.open(
@@ -629,11 +671,11 @@ class Ui_Dialog(object):
                     self.index_frames.append(video_idx)
                     num += 1
             wave_file.setpos(i)
-            #num += 1
+            # num += 1
 
         wave_file.close()
 
-    @Slot(np.ndarray)
+    @ Slot(np.ndarray)
     def update_frame(self, frame: np.ndarray):
         # convert the frame data to a QImage for display in the label widget
         qimage = QImage(
@@ -713,7 +755,7 @@ class Ui_Dialog(object):
             QCoreApplication.translate("Dialog", u"Stop", None))
 
     # Define a custom slot to handle the click event
-    @Slot('QModelIndex')
+    @ Slot('QModelIndex')
     def on_item_clicked(self, index):
 
         idx = self.listView.currentIndex().row()
