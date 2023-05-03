@@ -15,6 +15,8 @@ from typing import Tuple
 
 import pyaudio
 import wave
+import scipy.signal as sig
+from scipy.signal import stft
 
 import numpy as np
 import cv2
@@ -46,8 +48,6 @@ from PySide6.QtMultimedia import (QMediaPlayer)
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
-import librosa
-import soundfile
 import io
 from scipy.io import wavfile
 
@@ -304,9 +304,6 @@ class Ui_Dialog(object):
         self.index_labels = []
         self.index_frames = []
         
-        # unvoiced_wave_file
-        self.unvoiced_wave_file = None
-
         if not Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
         Dialog.resize(738, 447)
@@ -498,7 +495,7 @@ class Ui_Dialog(object):
         self.index_frames.append(self.shot_frame_idx[frame_idx])
         frame_idx = frame_idx + 1
 
-        self.detect_abrupt_sound_change(
+        self.detect_abrupt_sound_change_v2(
             self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
         for i in range(1, len(self.shot_frames_med_bgr)):
@@ -528,10 +525,61 @@ class Ui_Dialog(object):
             frame_idx = frame_idx + 1
 
             if(len(self.shot_frame_idx) > frame_idx):
-                self.detect_abrupt_sound_change(
+                self.detect_abrupt_sound_change_v2(
                     self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
             print(f"Index {sceneNum}-{shotNum}:({self.shot_frame_idx[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]}")
+    
+    def detect_abrupt_sound_change_v2(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
+        
+        wave_file = wave.open(str(audioPath), 'rb')
+        
+        audio_frame_rate = wave_file.getframerate()
+
+        # Define the start and end frame indices and window size for detecting sudden volume changes
+        start_frame_idx = start_video_frame_idx
+        end_frame_idx = end_video_frame_idx
+        start_audio_idx = int(start_frame_idx * audio_frame_rate / frame_rate)
+        end_audio_idx = int(end_frame_idx * audio_frame_rate / frame_rate)
+
+        duration = (end_audio_idx - start_audio_idx) / audio_frame_rate
+        if duration <= 10:
+            return
+        window_size = int(audio_frame_rate * duration)  # window size of 1 second
+        threshold = 0.8  # 50% change in spectral energy
+
+        # Compute the STFT parameters
+        fft_size = 1024
+        hop_size = int(window_size / 2)
+
+        # Loop through the audio in the specified range and detect sudden changes in the spectral characteristics
+        num = 1
+        for i in range(start_audio_idx, end_audio_idx, hop_size):
+            data = wave_file.readframes(window_size)
+            data_np = np.frombuffer(data, dtype=np.int16)
+            if len(data_np) < window_size:
+                break
+            stft = np.abs(np.fft.rfft(data_np, fft_size))
+            if i > start_audio_idx:
+                prev_data = wave_file.readframes(window_size)
+                prev_data_np = np.frombuffer(prev_data, dtype=np.int16)
+                if len(prev_data_np) < window_size:
+                    break
+                prev_stft = np.abs(np.fft.rfft(prev_data_np, fft_size))
+                spectral_diff = np.sum(np.abs(stft - prev_stft)) / np.sum(prev_stft)
+                if 1 > spectral_diff > threshold:
+                    if num == 1:
+                        video_idx = int(start_audio_idx * frame_rate / audio_frame_rate)
+                        self.index_labels.append("                 Subshot " + str(num) +" "+ str(spectral_diff))
+                        self.index_frames.append(video_idx)
+                        num += 1
+                    video_idx = int(i * frame_rate / audio_frame_rate)
+                    self.index_labels.append("                 Subshot " + str(num)+" "+ str(spectral_diff))
+                    self.index_frames.append(video_idx)
+                    num += 1
+            wave_file.setpos(i)
+
+        wave_file.close()
 
     def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
         
@@ -541,11 +589,14 @@ class Ui_Dialog(object):
 
         # Define the start and end frame indices and window size for detecting sudden volume changes
         start_frame_idx = start_video_frame_idx  # start at the 500th frame
-        end_frame_idx = end_video_frame_idx  # end at the 1000th frame
+        end_frame_idx = end_video_frame_idx # end at the 1000th frame
         start_audio_idx = int(start_frame_idx * audio_frame_rate / frame_rate)
         end_audio_idx = int(end_frame_idx * audio_frame_rate / frame_rate)
+
+        duration = ((end_audio_idx - start_audio_idx) / audio_frame_rate) - 1
+
         window_size = int(audio_frame_rate * 1)  # window size of 0.5 seconds
-        threshold = 0.5  # 10% change in volume
+        threshold = 0.7  # 10% change in volume
 
         # Loop through the audio in the specified range and detect sudden volume changes
         num = 1
