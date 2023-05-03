@@ -11,83 +11,77 @@
 import os
 import time
 from pathlib import Path
-from typing import Tuple
 
 import pyaudio
 import wave
+from scipy.signal import stft
 
 import numpy as np
 import cv2
 import time
 
-import re
-
 import sys
 
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-                            QMetaObject, QObject, QPoint, QRect,
-                            QSize, QTime, QUrl, Qt,
+from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect,
                             QStringListModel, QThread, Signal, Slot)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
-                           QFont, QFontDatabase, QGradient, QIcon,
-                           QImage, QKeySequence, QLinearGradient, QPainter,
-                           QPalette, QPixmap, QRadialGradient, QTransform,
-                           QImage, QPixmap)
-from PySide6.QtWidgets import (QApplication, QDialog, QGraphicsView, QListView,
-                               QPushButton, QSizePolicy, QWidget, QLabel, QVBoxLayout, QMessageBox)
-
-from PySide6.QtMultimediaWidgets import QVideoWidget
-
-from PySide6.QtMultimedia import (QMediaPlayer)
-
-# from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
-# from tensorflow.keras.preprocessing import image
+from PySide6.QtGui import (QImage, QPixmap, QImage, QPixmap)
+from PySide6.QtWidgets import (QApplication, QDialog, QListView,
+                               QPushButton, QWidget, QLabel, QVBoxLayout)
 
 from skimage.feature import hog
 from sklearn.metrics.pairwise import cosine_similarity
 
-import librosa
-import soundfile
-import io
-from scipy.io import wavfile
+########################
+# Pre-defined Parameters
+########################
+#For SHOTS
+SHOT_THRESHOLD = 15  # MAD #Can adjust it
+SAME_SHOT_WINDOWS = 15  # Number of Indexes we assume the same shots #Can adjust it
 
-SHOT_THRESHOLD = 15  # MAD #Please Adjust later
-SAME_SHOT_WINDOWS = 15  # Number of Index we assume the same shots #Please Adjust later
-#SCENE_THRESHOLD = 0.60  # Similarity #Please Adjust later
-SCENE_COEFF_COLOR_HIST = 0.5  # Similarity #Please Adjust later. The larger, The smaller threshold(One Scene has more shots)
-SCENE_COEFF_HOG = 0.81  # Similarity #Please Adjust later The larger, The smaller threshold(One Scene has more shots)
+#For SCENES
+SCENE_COEFF_COLOR_HIST = 0.5  # Similarity #The larger, The smaller threshold(One Scene has more shots)
+SCENE_COEFF_HOG = 0.81  # Similarity #The larger, The smaller threshold(One Scene has more shots)
 
+#For SUBSHOTS
+DETECT_SUBSHOT_WINDOWS = 10 # Unit: Seconds
+SPECTRA_DIFFERENCE_THRESHOLD = 0.8  # 50% change in spectral energy
 
-# Function to extract color histogram features from an image (HSV version) 
-def extract_color_histogram_features(img, bins=8):
+# Utilities
+class Utils():
+    # Function to extract color histogram features from an image (HSV version) 
+    def extract_color_histogram_features(img, bins=8):
 
-    # Convert the frame from BGR to HSV color space
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # Convert the frame from BGR to HSV color space
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    # Calculate a 3D color histogram with 8 bins per channel
-    hist = cv2.calcHist([hsv], [0, 1, 2], None, [bins, bins, bins],
-                        [0, 180, 0, 256, 0, 256])
+        # Calculate a 3D color histogram with 8 bins per channel
+        hist = cv2.calcHist([hsv], [0, 1, 2], None, [bins, bins, bins],
+                            [0, 180, 0, 256, 0, 256])
 
-    cv2.normalize(hist, hist)
+        cv2.normalize(hist, hist)
 
-    return hist.flatten()
+        return hist.flatten()
 
-# Function to extract HOG features from an image
-def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
-    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    hog_features = hog(gray_img, orientations=9,
-                       pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
+    # Function to extract HOG features from an image
+    def extract_hog_features(img, pixels_per_cell=(16, 16), cells_per_block=(2, 2)):
+        
+        # Convert the frame from BGR to GRAY color space
+        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate the HOG feature (textture)
+        hog_features = hog(gray_img, orientations=9,
+                        pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block)
 
-    return hog_features
+        return hog_features
 
-# Function to Calculate Absolute Difference
-def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
-    # Calculate absolute difference betweeb two continuous frames
-    abs_diff = cv2.absdiff(img1, img2)
+    # Function to Calculate Absolute Difference
+    def meanAbsDiff(img1: np.ndarray, img2: np.ndarray) -> float:
+        # Calculate absolute difference between two continuous frames(Frame by Frame)
+        abs_diff = cv2.absdiff(img1, img2)
 
-    # Calculate mean of absolute difference
-    mad = np.mean(abs_diff)
-    return mad
+        # Calculate mean of absolute difference
+        mad = np.mean(abs_diff)
+        return mad
 
 #  Video Thread Class
 class VideoThread(QThread):
@@ -110,10 +104,10 @@ class VideoThread(QThread):
         self.listView = listView
 
     def run(self):
-        # open the video file for reading
+        # Open the video files
         with open(self.file_path, "rb") as file:
 
-            # Set the start frame
+            # Seek the start frame
             file.seek(self.start_frame_idx * self.width * self.height * 3)
 
             next_frame_time = time.monotonic()
@@ -209,7 +203,7 @@ class AudioThread(QThread):
         wf = wave.open(str(self.file_path), 'rb')
         p = pyaudio.PyAudio()
 
-        print(f'self.start_frame_idx: {self.start_frame_idx}')
+        print(f'Run it! start_frame_idx: {self.start_frame_idx}')
 
         # set the start position of audio
         starting_time_offset = self.start_frame_idx / self.fps
@@ -291,7 +285,7 @@ class Ui_Dialog(object):
         self.width, self.height = 480, 270
         self.fps = 30
         self.num_frames = (int)(self.calNumOfFrame())
-        print(f"self.num_frames : {self.num_frames}")
+        print(f"num_frames : {self.num_frames}")
 
         self.shot_frame_idx = []
         self.shot_frames_gray = []  # Shot's start frames(gray)
@@ -304,9 +298,6 @@ class Ui_Dialog(object):
         self.index_labels = []
         self.index_frames = []
         
-        # unvoiced_wave_file
-        self.unvoiced_wave_file = None
-
         if not Dialog.objectName():
             Dialog.setObjectName(u"Dialog")
         Dialog.resize(738, 447)
@@ -391,6 +382,10 @@ class Ui_Dialog(object):
         return num_frames
 
     def searchShots(self):
+        print("**************************")
+        print("***Start searching Shots.")
+        print("**************************")
+        
         shot_number = 0
         # open the video file for reading
         with open(self.video_file_path, "rb") as file:
@@ -413,7 +408,7 @@ class Ui_Dialog(object):
                 if i > 0:
 
                     # Calculate mean of absolute difference
-                    mad = meanAbsDiff(gray_image, prev_gray_image)
+                    mad = Utils.meanAbsDiff(gray_image, prev_gray_image)
 
                     if mad > SHOT_THRESHOLD:
                         # Print MAD value
@@ -443,6 +438,10 @@ class Ui_Dialog(object):
                 prev_gray_image = gray_image.copy()
 
     def extractScenes(self):
+        print("**************************")
+        print("***Start extrating Scenes and making subshots detecting abrupt audio changes.")
+        print("**************************")
+        
         # Calculate the mean of shots
         start_idx = 0
         end_idx = 0
@@ -466,9 +465,9 @@ class Ui_Dialog(object):
         candidate_color_frames_bgr = self.shot_frames_med_bgr
         candidate_hog_frames_bgr = self.shot_frames_med_bgr
         
-        color_features = np.vstack([np.hstack((extract_color_histogram_features(
+        color_features = np.vstack([np.hstack((Utils.extract_color_histogram_features(
             frame))) for frame in candidate_color_frames_bgr])
-        hog_features = np.vstack([np.hstack((extract_hog_features(
+        hog_features = np.vstack([np.hstack((Utils.extract_hog_features(
             frame))) for frame in candidate_hog_frames_bgr])
 
         # Calculate similarity matrix
@@ -509,16 +508,16 @@ class Ui_Dialog(object):
 
             else:
                 if similarity_matrix_color[i - 1, i] <= (similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]):
-                    print("COLOR")
+                    print("***The COLOR Features Difference is way more than before")
                 if similarity_matrix_hog[i - 1, i] <= (similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]):
-                    print("HOG")
+                    print("***The HOG Features Difference is way more than before")
                 
                 current_scene = [self.shot_frames_bgr[i]]
                 sceneNum = sceneNum + 1
                 shotNum = 1
 
                 # Save Index labels and related frame_idx
-                print("Scene Changed!!")
+                print("***Scene Changed!!")
                 self.index_labels.append("Scene "+str(sceneNum))
                 self.index_frames.append(self.shot_frame_idx[frame_idx])
 
@@ -532,47 +531,55 @@ class Ui_Dialog(object):
                     self.audio_file_path, self.shot_frame_idx[frame_idx - 1], self.shot_frame_idx[frame_idx], 30)
 
             print(f"Index {sceneNum}-{shotNum}:({self.shot_frame_idx[i]}) {similarity_matrix_color[i - 1, i]} / {similarity_mean_color[i] - SCENE_COEFF_COLOR_HIST * similarity_std_color[i]}, {similarity_matrix_hog[i - 1, i]} / {similarity_mean_hog[i] - SCENE_COEFF_HOG * similarity_std_hog[i]}")
-
+    
     def detect_abrupt_sound_change(self, audioPath, start_video_frame_idx, end_video_frame_idx, frame_rate):
         
-        wave_file = wave.open((str(audioPath)), 'rb')  # We need to change to utilize only background sound
+        wave_file = wave.open(str(audioPath), 'rb')
         
         audio_frame_rate = wave_file.getframerate()
 
         # Define the start and end frame indices and window size for detecting sudden volume changes
-        start_frame_idx = start_video_frame_idx  # start at the 500th frame
-        end_frame_idx = end_video_frame_idx  # end at the 1000th frame
+        start_frame_idx = start_video_frame_idx
+        end_frame_idx = end_video_frame_idx
         start_audio_idx = int(start_frame_idx * audio_frame_rate / frame_rate)
         end_audio_idx = int(end_frame_idx * audio_frame_rate / frame_rate)
-        window_size = int(audio_frame_rate * 1)  # window size of 0.5 seconds
-        threshold = 0.5  # 10% change in volume
 
-        # Loop through the audio in the specified range and detect sudden volume changes
+        duration = (end_audio_idx - start_audio_idx) / audio_frame_rate
+        if duration <= DETECT_SUBSHOT_WINDOWS:
+            return
+        window_size = int(audio_frame_rate * duration)  # window size of 1 second
+        threshold = SPECTRA_DIFFERENCE_THRESHOLD  # 50% change in spectral energy
+
+        # Compute the STFT parameters
+        fft_size = 1024
+        hop_size = int(window_size / 2)
+
+        # Loop through the audio in the specified range and detect sudden changes in the spectral characteristics
         num = 1
-        for i in range(start_audio_idx, end_audio_idx, window_size):
+        for i in range(start_audio_idx, end_audio_idx, hop_size):
             data = wave_file.readframes(window_size)
             data_np = np.frombuffer(data, dtype=np.int16)
-            rms = np.sqrt(np.mean(data_np**2))
+            if len(data_np) < window_size:
+                break
+            stft = np.abs(np.fft.rfft(data_np, fft_size))
             if i > start_audio_idx:
                 prev_data = wave_file.readframes(window_size)
                 prev_data_np = np.frombuffer(prev_data, dtype=np.int16)
-                prev_rms = np.sqrt(np.mean(prev_data_np**2))
-                if abs(rms - prev_rms) > prev_rms * threshold:
-                    # Add First Index
+                if len(prev_data_np) < window_size:
+                    break
+                prev_stft = np.abs(np.fft.rfft(prev_data_np, fft_size))
+                spectral_diff = np.sum(np.abs(stft - prev_stft)) / np.sum(prev_stft)
+                if 1 > spectral_diff > threshold:
                     if num == 1:
-                        video_idx = int(start_audio_idx *
-                                        frame_rate / audio_frame_rate)
-                        self.index_labels.append(
-                            "                    Subshot " + str(num))
+                        video_idx = int(start_audio_idx * frame_rate / audio_frame_rate)
+                        self.index_labels.append("                 Subshot " + str(num))
                         self.index_frames.append(video_idx)
                         num += 1
                     video_idx = int(i * frame_rate / audio_frame_rate)
-                    self.index_labels.append(
-                        "                    Subshot " + str(num))
+                    self.index_labels.append("                 Subshot " + str(num))
                     self.index_frames.append(video_idx)
                     num += 1
             wave_file.setpos(i)
-            # num += 1
 
         wave_file.close()
 
@@ -704,7 +711,14 @@ class Ui_Dialog(object):
         if self.video_thread.isFinished() and self.audio_thread.isFinished():
             print("Threads ended properly")
         else:
-            print("Threads are still running")
+            self.video_thread.start()
+            self.video_thread.stop()
+            self.video_thread.start()
+            self.audio_thread.stop()
+            if self.video_thread.isFinished() and self.audio_thread.isFinished():
+                print("Threads ended properly")
+            else:
+                print("Threads are still running")
 
 
 class MainQDialog(QDialog):
@@ -713,6 +727,8 @@ class MainQDialog(QDialog):
 
         # Set up the UI
         self.ui = Ui_Dialog(self, args)
+        
+        self.setWindowTitle("Video Player")
 
     def closeEvent(self, event):
         # Custom behavior when the "X" button is pressed
@@ -733,3 +749,4 @@ if __name__ == '__main__':
 
     # Start
     app.exec()
+    
