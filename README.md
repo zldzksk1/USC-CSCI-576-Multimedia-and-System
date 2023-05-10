@@ -23,5 +23,5 @@ Imeplenmetation
 - Compare the audio signal during the window size
 
 Player images <br>
-<img src="https://github.com/zldzksk1/USC-CSCI-576-Multimedia-and-System/blob/main/videoPlayer2.png" alt="Example Image" style="max-width: 300px; height: auto;">
-<img src="https://github.com/zldzksk1/USC-CSCI-576-Multimedia-and-System/blob/main/videoPlayer.png" alt="Example Image" style="max-width: 300px; height: auto;">
+<img src="https://github.com/zldzksk1/USC-CSCI-576-Multimedia-and-System/blob/main/videoPlayer2.png" alt="Player Image" style="max-width: 200px; height: auto;">
+<img src="https://github.com/zldzksk1/USC-CSCI-576-Multimedia-and-System/blob/main/videoPlayer.png" alt="Player Image" style="max-width: 200px; height: auto;">
