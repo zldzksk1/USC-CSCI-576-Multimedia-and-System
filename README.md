@@ -1,7 +1,7 @@
 # CSCI-576---Video-Player
 Final project for the CSCI 576 - Multimedia System
 
-Our project entails the implementation of a sophisticated video player with four primary features: play, pause, stop, and seamless scene navigation.<br>
+Our group project entails the implementation of a sophisticated video player with four primary features: play, pause, stop, and seamless scene navigation.<br>
 
 # Shot and Scene Detection / Scene segmentation using Cosine Similarity
 - Divide Shots comparing the differences between adjacent frames
